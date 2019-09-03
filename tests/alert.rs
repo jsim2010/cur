@@ -22,7 +22,7 @@ fn char() {
 
 /// [`Scent::Union`] of [`Scent::Atom`]s shall alert a string with a single [`char`] that matches one of the given [`char`]s.
 #[test]
-fn union_chars() {
+fn union_of_chars() {
     let cur = Cur::with_scent(Scent::Union(vec![Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]));
 
     assert!(cur.alert("a"));
@@ -37,7 +37,7 @@ fn union_chars() {
 
 /// [`Scent::Sequence`] of [`Scent::Atom`]s shall alert a string with matching [`char`]s in matching order.
 #[test]
-fn sequence_chars() {
+fn sequence_of_chars() {
     let cur = Cur::with_scent(Scent::Sequence(vec![Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]));
 
     assert!(cur.alert("abc"));
@@ -62,4 +62,32 @@ fn union_sequences() {
     assert!(!cur.alert("d"));
     assert!(!cur.alert("fd"));
     assert!(!cur.alert("df"));
+}
+
+/// [`Scent::AnyRepetition`] of [`Scent::Atom`]s shall alert any repetition of [`Scent::Atom`].
+#[test]
+fn any_repetition() {
+    let cur = Cur::with_scent(Scent::AnyRepetition(Box::new(Scent::Atom('a'))));
+
+    assert!(cur.alert(""));
+    assert!(cur.alert("a"));
+    assert!(cur.alert("aa"));
+    assert!(cur.alert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"));
+    assert!(!cur.alert("b"));
+    assert!(!cur.alert("ba"));
+    assert!(!cur.alert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"));
+    assert!(!cur.alert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaa"));
+}
+
+/// [`Scent::Union`] with [`Scent::AnyRepetition`] shall alert when one of the branches matches.
+#[test]
+fn union_with_any_repetition() {
+    let cur = Cur::with_scent(Scent::Union(vec![Scent::AnyRepetition(Box::new(Scent::Atom('a'))), Scent::Atom('b')]));
+
+    assert!(cur.alert(""));
+    assert!(cur.alert("a"));
+    assert!(cur.alert("aa"));
+    assert!(cur.alert("b"));
+    assert!(!cur.alert("ab"));
+    assert!(!cur.alert("c"));
 }
