@@ -1,3 +1,4 @@
+//! cur - The tool that will hunt for your regular expression.
 #![warn(
     absolute_paths_not_starting_with_crate,
     anonymous_parameters,
@@ -45,70 +46,11 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, vec, vec::Vec};
-
-#[derive(Debug)]
-pub enum Scent {
-    Clear,
-    Atom(char),
-    Union(Vec<Scent>),
-    Sequence(Vec<Scent>),
-    AnyRepetition(Box<Scent>),
-}
-
-impl Scent {
-    fn get_possible_detections(&self, chars: &[char], mut index: usize) -> Vec<usize> {
-        match self {
-            Self::Clear => vec![index],
-            Self::Atom(c) => {
-                if chars.get(index) == Some(c) {
-                    index += 1;
-                    vec![index]
-                } else {
-                    vec![]
-                }
-            }
-            Self::Union(scents) => {
-                let mut possible_detections = Vec::new();
-
-                for branch in scents {
-                    possible_detections.extend(branch.get_possible_detections(chars, index));
-                }
-
-                possible_detections
-            }
-            Self::Sequence(scents) => {
-                let mut possible_detections = Vec::new();
-
-                for scent in scents {
-                    possible_detections = scent.get_possible_detections(chars, index);
-
-                    if possible_detections.is_empty() {
-                        break;
-                    } else {
-                        index = possible_detections[0];
-                    }
-                }
-
-                possible_detections
-            }
-            Self::AnyRepetition(scent) => {
-                // Return index after detecting as many of scent as possible.
-                let mut possible_detections = scent.get_possible_detections(chars, index);
-
-                while !possible_detections.is_empty() {
-                    index = possible_detections[0];
-                    possible_detections = scent.get_possible_detections(chars, index);
-                }
-
-                vec![index]
-            }
-        }
-    }
-}
+use alloc::{vec, vec::Vec};
+pub use cur_macro::scent;
 
 /// Searches for [`Scent`]s.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub struct Cur {
     /// The [`Scent`] the `cur` is searching for.
     scent: Scent,
@@ -159,6 +101,87 @@ impl Cur {
             }
 
             None
+        }
+    }
+}
+
+/// Represents a pattern to be matched against.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Scent {
+    /// Matches an empty string.
+    Clear,
+    /// Matches a single [`char`].
+    Atom(char),
+    /// Matches any given [`Scent`].
+    ///
+    /// Matches are attempted in the order of the [`Vec`].
+    Union(&'static[Scent]),
+    /// Matches each given [`Scent`] in the order of the [`Vec`].
+    Sequence(&'static[Scent]),
+    /// Matches any number of repetitions of the given [`Scent`], including 0.
+    AnyRepetition(&'static Scent),
+}
+
+impl Scent {
+    /// Return all possible detections of `self` in starting from `index` of `chars`.
+    ///
+    /// A detection is the first index after the match.
+    pub fn get_possible_detections(&self, chars: &[char], mut index: usize) -> Vec<usize> {
+        match self {
+            Self::Clear => vec![index],
+            Self::Atom(c) => {
+                if chars.get(index) == Some(c) {
+                    index += 1;
+                    vec![index]
+                } else {
+                    vec![]
+                }
+            }
+            Self::Union(branches) => {
+                let mut possible_detections = Vec::new();
+
+                for branch in branches.iter() {
+                    possible_detections.extend(branch.get_possible_detections(chars, index));
+                }
+
+                possible_detections
+            }
+            Self::Sequence(elements) => {
+                let mut indexes = vec![index];
+                let mut possible_detections = Vec::new();
+
+                for scent in elements.iter() {
+                    possible_detections = Vec::new();
+
+                    for element_index in indexes {
+                        possible_detections.extend(scent.get_possible_detections(chars, element_index));
+                    }
+
+                    if possible_detections.is_empty() {
+                        break;
+                    } else {
+                        indexes = possible_detections.clone();
+                    }
+                }
+
+                possible_detections
+            }
+            Self::AnyRepetition(scent) => {
+                let mut possible_detections = vec![index];
+
+                loop {
+                    let next_detections = scent.get_possible_detections(chars, index);
+
+                    if let Some(detection) = next_detections.last() {
+                        index = *detection;
+                        possible_detections.extend(next_detections);
+                    } else {
+                        break;
+                    }
+                }
+
+                possible_detections
+            }
         }
     }
 }
