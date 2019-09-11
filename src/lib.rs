@@ -1,4 +1,4 @@
-//! cur - The tool that will hunt for your regular expression.
+//! cur - Your hunting companion for regular expressions.
 #![warn(
     absolute_paths_not_starting_with_crate,
     anonymous_parameters,
@@ -62,11 +62,11 @@ impl Cur {
         Self {scent}
     }
 
-    /// Returns if scent matches `env`.
+    /// Returns if scent matches `cover`.
     ///
-    /// Note that match only occurs if all of `env` is covered by scent.
-    pub fn alert(&self, env: &str) -> bool {
-        let chars: Vec<char> = env.chars().collect();
+    /// Note that match only occurs if scent matches with all of `area`.
+    pub fn alert(&self, area: &str) -> bool {
+        let chars: Vec<char> = area.chars().collect();
         let possible_detections = self.scent.get_possible_detections(chars.as_slice(), 0);
 
         for detection in possible_detections {
@@ -81,9 +81,8 @@ impl Cur {
     /// Searches for scent starting at each index of `env`, returning the first successful index.
     ///
     /// [`None`] indicates there was no successful scent detection.
-    pub fn indicate(&self, env: &str) -> Option<usize> {
+    pub fn point(&self, env: &str) -> Option<usize> {
         let chars: Vec<char> = env.chars().collect();
-        let mut index = 0;
 
         if let Scent::Clear = self.scent {
             if chars.is_empty() {
@@ -92,6 +91,8 @@ impl Cur {
                 None
             }
         } else {
+            let mut index = 0;
+
             for target in 0..chars.len() {
                 if self.scent.get_possible_detections(&chars, target).is_empty() {
                     index += 1;
@@ -112,6 +113,8 @@ pub enum Scent {
     Clear,
     /// Matches a single [`char`].
     Atom(char),
+    /// Matches any [`char`] inclusively between the two given.
+    Range(char, char),
     /// Matches any given [`Scent`].
     ///
     /// Matches are attempted in the order of the [`Vec`].
@@ -138,6 +141,16 @@ impl Scent {
                 } else {
                     vec![]
                 }
+            }
+            Self::Range(start, end) => {
+                if let Some(c) = chars.get(index) {
+                    if (start..=end).contains(&c) {
+                        index += 1;
+                        return vec![index];
+                    }
+                }
+
+                vec![]
             }
             Self::Union(branches) => {
                 let mut possible_detections = Vec::new();
@@ -188,8 +201,11 @@ impl Scent {
     }
 }
 
+/// Specifies the how [`Scent::Repetition`] repeats.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Cast {
+    /// [`Scent::Repetition`] will prefer the minimum number of repeats.
     Minimum,
+    /// [`Scent::Repetition`] will prefer the maximum number of repeats.
     Maximum,
 }

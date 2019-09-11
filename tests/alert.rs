@@ -20,6 +20,18 @@ fn char() {
     assert!(!cur.alert("ab"));
 }
 
+/// [`Scent::Range`] shall alert a string with a single [`char`] that is within the given range.
+#[test]
+fn range() {
+    let cur = Cur::with_scent(Scent::Range('b', 'd'));
+
+    assert!(cur.alert("b"));
+    assert!(cur.alert("c"));
+    assert!(cur.alert("d"));
+    assert!(!cur.alert("a"));
+    assert!(!cur.alert("e"));
+}
+
 /// [`Scent::Union`] of [`Scent::Atom`]s shall alert a string with a single [`char`] that matches one of the given [`char`]s.
 #[test]
 fn union_of_chars() {

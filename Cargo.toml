@@ -14,3 +14,7 @@ categories = ["text-processing", "no-std"]
 
 [dependencies]
 cur_macro = "0.1.0"
+
+[lib]
+# There are currently no doctests and having one would require a global memory allocator.
+doctest = false
