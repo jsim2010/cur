@@ -3,11 +3,11 @@ name: PR
 on: pull_request
 
 jobs:
-  check:
+  validate:
     name: windows-latest - stable
     runs-on: windows-latest
     steps:
-      - name: Fail if not updated
+      - name: Fail if code was not updated
         if: github.event.action != 'opened' && github.event.action != 'synchronize'
         env:
           GITHUB_EVENT_ACTION: ${{ github.event.action }}
@@ -26,7 +26,7 @@ jobs:
         run: cargo test --verbose
   standardize:
     name: Standardize
-    needs: check
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Fail if not automerging
@@ -46,4 +46,4 @@ jobs:
       - name: Commit changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions" && git add . && git commit -m "Standardize project" --author="Standardizer <jsim2010@gmail.com>" && git push --set-upstream origin "${GITHUB_REF:11}"
+        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions" && git add . && git commit -m "Standardize project" --author="Standardizer <jsim2010@gmail.com>" && git push --set-upstream origin "$GITHUB_REF"
