@@ -42,9 +42,10 @@ jobs:
         run: cargo install cargo-readme
       - name: Standardize
         run: cargo fmt && cargo readme > README.md
-      - name: Commit changes
-        run: git add -A && git status && git config user.email "" && git config user.name "Standards" && git commit -m "Standardize pull-request" || echo "No changes found. Nothing to commit."
-      - name: Push
-        uses: ad-m/github-push-action@v.0.3.0
+      - uses: stefanzweifel/git-auto-commit-action@v2.0.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          commit_author_email: jsim2010@gmail.com
+          commit_author_name: Standardizer
+          commit_message: Standardize project
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
