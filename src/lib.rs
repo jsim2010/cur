@@ -119,7 +119,9 @@ pub enum Scent {
     /// Matches each given [`Scent`] in the order of the [`Vec`].
     Sequence(&'static[Scent]),
     /// Matches any number of repetitions of the given [`Scent`], including 0.
-    AnyRepetition(&'static Scent),
+    ///
+    /// If the given [`Cast`] is [`Cast::Minimal`], will first match with the fewest number of repetitions. Otherwise, will first match with the greatest number of repetitions.
+    Repetition(&'static Scent, Cast),
 }
 
 impl Scent {
@@ -166,7 +168,7 @@ impl Scent {
 
                 possible_detections
             }
-            Self::AnyRepetition(scent) => {
+            Self::Repetition(scent, _cast) => {
                 let mut possible_detections = vec![index];
 
                 loop {
@@ -184,4 +186,10 @@ impl Scent {
             }
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cast {
+    Minimum,
+    Maximum,
 }

@@ -13,4 +13,4 @@ categories = ["text-processing", "no-std"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-cur_macro = {path = "../cur_macro"}
+cur_macro = "0.1.0"
