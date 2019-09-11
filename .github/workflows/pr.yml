@@ -2,7 +2,8 @@ name: PR
 
 on:
   push:
-    '!master'
+    branches: 
+      - '!master'
 
 jobs:
   validate:
