@@ -18,3 +18,5 @@ cur_macro = "0.1.0"
 [lib]
 # There are currently no doctests and having one would require a global memory allocator.
 doctest = false
+# Required to make cargo-readme work; see https://github.com/livioribeiro/cargo-readme/issues/32.
+path = "src/lib.rs"
