@@ -35,13 +35,14 @@ jobs:
           GITHUB_USER_LOGIN: ${{ github.event.pull_request.user.login }}
           GITHUB_LABEL_NAMES: ${{ github.event.pull_request.labels.*.name }}
         run: echo "User:" && echo "$GITHUB_USER_LOGIN" && echo "Labels:" && echo "$GITHUB_LABEL_NAMES" && return 1
-      - uses: actions/checkout@v1.0.0
-        with:
-          ref: ${{ github.event.pull_request.head.ref }}
+      - name: Checkout
+        uses: actions/checkout@v1.0.0
       - name: Setup tools
         run: cargo install cargo-readme
       - name: Standardize
         run: cargo fmt && cargo readme > README.md
+      - name: Output
+        run: ls
       - uses: stefanzweifel/git-auto-commit-action@v2.0.0
         with:
           commit_author_email: jsim2010@gmail.com
