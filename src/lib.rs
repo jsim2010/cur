@@ -59,7 +59,7 @@ pub struct Cur {
 impl Cur {
     /// Creates a [`Cur`] with `scent`.
     pub const fn with_scent(scent: Scent) -> Self {
-        Self {scent}
+        Self { scent }
     }
 
     /// Returns if scent matches `cover`.
@@ -94,7 +94,11 @@ impl Cur {
             let mut index = 0;
 
             for target in 0..chars.len() {
-                if self.scent.get_possible_detections(&chars, target).is_empty() {
+                if self
+                    .scent
+                    .get_possible_detections(&chars, target)
+                    .is_empty()
+                {
                     index += 1;
                 } else {
                     return Some(index);
@@ -118,9 +122,9 @@ pub enum Scent {
     /// Matches any given [`Scent`].
     ///
     /// Matches are attempted in the order of the [`Vec`].
-    Union(&'static[Scent]),
+    Union(&'static [Scent]),
     /// Matches each given [`Scent`] in the order of the [`Vec`].
-    Sequence(&'static[Scent]),
+    Sequence(&'static [Scent]),
     /// Matches any number of repetitions of the given [`Scent`], including 0.
     ///
     /// If the given [`Cast`] is [`Cast::Minimal`], will first match with the fewest number of repetitions. Otherwise, will first match with the greatest number of repetitions.
@@ -169,7 +173,8 @@ impl Scent {
                     possible_detections = Vec::new();
 
                     for element_index in indexes {
-                        possible_detections.extend(scent.get_possible_detections(chars, element_index));
+                        possible_detections
+                            .extend(scent.get_possible_detections(chars, element_index));
                     }
 
                     if possible_detections.is_empty() {
