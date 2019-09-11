@@ -1,17 +1,14 @@
 name: PR
 
-on: pull_request
+on:
+  push:
+    '!master'
 
 jobs:
   validate:
     name: windows-latest - stable
     runs-on: windows-latest
     steps:
-      - name: Fail if code was not updated
-        if: github.event.action != 'opened' && github.event.action != 'synchronize'
-        env:
-          GITHUB_EVENT_ACTION: ${{ github.event.action }}
-        run: echo "Event action:" && echo "$GITHUB_EVENT_ACTION" && return 1
       - uses: actions/checkout@v1.0.0
         with:
           fetch-depth: 1
