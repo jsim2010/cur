@@ -1,0 +1,11 @@
+pull_request_rules:
+  - name: squash standardized prs
+    conditions:
+      - status-success=Standardize
+    actions:
+      merge:
+        method: squash
+  - name: delete merged branches
+    conditions: []
+    actions:
+      delete_head_branch: {}
