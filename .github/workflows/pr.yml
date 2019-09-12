@@ -27,7 +27,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v1.0.0
       - name: Fail if not automerging
-        if: github.event.pull_request.user.login != 'jsim2010' || !contains(github.event.pull_request.labels.*.name, 'automerge')
+        if: github.event.pull_request.user.login != 'jsim2010' || !contains([], 'automerge')
         env:
           GITHUB_USER_LOGIN: ${{ github.event.pull_request.user.login }}
           GITHUB_LABEL_NAMES: ${{ github.event.pull_request.labels.*.name }}
