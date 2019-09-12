@@ -1,4 +1,4 @@
-use cur::{Cur, Scent};
+use cur::{Cast, Cur, Scent};
 
 /// [`Scent::Clear`] shall alert an empty string.
 #[test]
@@ -20,10 +20,26 @@ fn char() {
     assert!(!cur.alert("ab"));
 }
 
+/// [`Scent::Range`] shall alert a string with a single [`char`] that is within the given range.
+#[test]
+fn range() {
+    let cur = Cur::with_scent(Scent::Range('b', 'd'));
+
+    assert!(cur.alert("b"));
+    assert!(cur.alert("c"));
+    assert!(cur.alert("d"));
+    assert!(!cur.alert("a"));
+    assert!(!cur.alert("e"));
+}
+
 /// [`Scent::Union`] of [`Scent::Atom`]s shall alert a string with a single [`char`] that matches one of the given [`char`]s.
 #[test]
 fn union_of_chars() {
-    let cur = Cur::with_scent(Scent::Union(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]));
+    let cur = Cur::with_scent(Scent::Union(&[
+        Scent::Atom('a'),
+        Scent::Atom('b'),
+        Scent::Atom('c'),
+    ]));
 
     assert!(cur.alert("a"));
     assert!(cur.alert("b"));
@@ -38,7 +54,11 @@ fn union_of_chars() {
 /// [`Scent::Sequence`] of [`Scent::Atom`]s shall alert a string with matching [`char`]s in matching order.
 #[test]
 fn sequence_of_chars() {
-    let cur = Cur::with_scent(Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]));
+    let cur = Cur::with_scent(Scent::Sequence(&[
+        Scent::Atom('a'),
+        Scent::Atom('b'),
+        Scent::Atom('c'),
+    ]));
 
     assert!(cur.alert("abc"));
     assert!(!cur.alert(""));
@@ -52,7 +72,11 @@ fn sequence_of_chars() {
 /// [`Scent::Union`] of [`Scent`]s  where at least 1 [`Scent`] is not [`Scent::Atom`] or [`Scent::Clear`] shall alert a string matching at least 1 of the [`Scent`]s.
 #[test]
 fn union_sequences() {
-    let cur = Cur::with_scent(Scent::Union(&[Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]), Scent::Sequence(&[Scent::Atom('d'), Scent::Atom('e')]), Scent::Atom('f')]));
+    let cur = Cur::with_scent(Scent::Union(&[
+        Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')]),
+        Scent::Sequence(&[Scent::Atom('d'), Scent::Atom('e')]),
+        Scent::Atom('f'),
+    ]));
 
     assert!(cur.alert("abc"));
     assert!(cur.alert("de"));
@@ -64,10 +88,10 @@ fn union_sequences() {
     assert!(!cur.alert("df"));
 }
 
-/// [`Scent::AnyRepetition`] of [`Scent::Atom`]s shall alert any repetition of [`Scent::Atom`].
+/// [`Scent::Repetition`] of [`Scent::Atom`]s shall alert any repetition of [`Scent::Atom`].
 #[test]
 fn any_repetition() {
-    let cur = Cur::with_scent(Scent::AnyRepetition(&Scent::Atom('a')));
+    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a'), Cast::Maximum));
 
     assert!(cur.alert(""));
     assert!(cur.alert("a"));
@@ -79,10 +103,13 @@ fn any_repetition() {
     assert!(!cur.alert("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaa"));
 }
 
-/// [`Scent::Union`] with [`Scent::AnyRepetition`] shall alert when one of the branches matches.
+/// [`Scent::Union`] with [`Scent::Repetition`] shall alert when one of the branches matches.
 #[test]
 fn union_with_any_repetition() {
-    let cur = Cur::with_scent(Scent::Union(&[Scent::AnyRepetition(&Scent::Atom('a')), Scent::Atom('b')]));
+    let cur = Cur::with_scent(Scent::Union(&[
+        Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
+        Scent::Atom('b'),
+    ]));
 
     assert!(cur.alert(""));
     assert!(cur.alert("a"));
@@ -92,10 +119,13 @@ fn union_with_any_repetition() {
     assert!(!cur.alert("c"));
 }
 
-/// [`Scent::Sequence`] with [`Scent::AnyRepetition`] followed by the repeated [`Scent`].
+/// [`Scent::Sequence`] with [`Scent::Repetition`] followed by the repeated [`Scent`].
 #[test]
 fn sequence_any_repetition_and_repeat() {
-    let cur = Cur::with_scent(Scent::Sequence(&[Scent::AnyRepetition(&Scent::Atom('a')), Scent::Atom('a')]));
+    let cur = Cur::with_scent(Scent::Sequence(&[
+        Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
+        Scent::Atom('a'),
+    ]));
 
     assert!(cur.alert("a"));
     assert!(cur.alert("aa"));

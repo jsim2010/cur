@@ -1,0 +1,34 @@
+name: PR
+
+on: pull_request
+
+jobs:
+  checks:
+    name: windows-latest - stable
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v1.0.0
+        with:
+          fetch-depth: 1
+      - uses: hecrj/setup-rust-action@v1.0.2
+        with:
+          rust-version: stable
+      - name: Build
+        run: cargo build --verbose
+      - name: Test
+        run: cargo test --verbose
+  validate:
+    name: Validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v1.0.0
+        with:
+          fetch-depth: 1
+      - name: Setup
+        run: cargo install cargo-readme
+      - name: Lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Format
+        run: cargo fmt -- --check
+      - name: Document
+        run: cargo readme | diff README.md -

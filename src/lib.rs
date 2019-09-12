@@ -1,4 +1,4 @@
-//! cur - The tool that will hunt for your regular expression.
+//! cur - Your hunting companion for regular expressions.
 #![warn(
     absolute_paths_not_starting_with_crate,
     anonymous_parameters,
@@ -59,14 +59,14 @@ pub struct Cur {
 impl Cur {
     /// Creates a [`Cur`] with `scent`.
     pub const fn with_scent(scent: Scent) -> Self {
-        Self {scent}
+        Self { scent }
     }
 
-    /// Returns if scent matches `env`.
+    /// Returns if scent matches `cover`.
     ///
-    /// Note that match only occurs if all of `env` is covered by scent.
-    pub fn alert(&self, env: &str) -> bool {
-        let chars: Vec<char> = env.chars().collect();
+    /// Note that match only occurs if scent matches with all of `area`.
+    pub fn alert(&self, area: &str) -> bool {
+        let chars: Vec<char> = area.chars().collect();
         let possible_detections = self.scent.get_possible_detections(chars.as_slice(), 0);
 
         for detection in possible_detections {
@@ -81,9 +81,8 @@ impl Cur {
     /// Searches for scent starting at each index of `env`, returning the first successful index.
     ///
     /// [`None`] indicates there was no successful scent detection.
-    pub fn indicate(&self, env: &str) -> Option<usize> {
+    pub fn point(&self, env: &str) -> Option<usize> {
         let chars: Vec<char> = env.chars().collect();
-        let mut index = 0;
 
         if let Scent::Clear = self.scent {
             if chars.is_empty() {
@@ -92,8 +91,14 @@ impl Cur {
                 None
             }
         } else {
+            let mut index = 0;
+
             for target in 0..chars.len() {
-                if self.scent.get_possible_detections(&chars, target).is_empty() {
+                if self
+                    .scent
+                    .get_possible_detections(&chars, target)
+                    .is_empty()
+                {
                     index += 1;
                 } else {
                     return Some(index);
@@ -112,14 +117,18 @@ pub enum Scent {
     Clear,
     /// Matches a single [`char`].
     Atom(char),
+    /// Matches any [`char`] inclusively between the two given.
+    Range(char, char),
     /// Matches any given [`Scent`].
     ///
     /// Matches are attempted in the order of the [`Vec`].
-    Union(&'static[Scent]),
+    Union(&'static [Scent]),
     /// Matches each given [`Scent`] in the order of the [`Vec`].
-    Sequence(&'static[Scent]),
+    Sequence(&'static [Scent]),
     /// Matches any number of repetitions of the given [`Scent`], including 0.
-    AnyRepetition(&'static Scent),
+    ///
+    /// If the given [`Cast`] is [`Cast::Minimal`], will first match with the fewest number of repetitions. Otherwise, will first match with the greatest number of repetitions.
+    Repetition(&'static Scent, Cast),
 }
 
 impl Scent {
@@ -136,6 +145,16 @@ impl Scent {
                 } else {
                     vec![]
                 }
+            }
+            Self::Range(start, end) => {
+                if let Some(c) = chars.get(index) {
+                    if (start..=end).contains(&c) {
+                        index += 1;
+                        return vec![index];
+                    }
+                }
+
+                vec![]
             }
             Self::Union(branches) => {
                 let mut possible_detections = Vec::new();
@@ -154,7 +173,8 @@ impl Scent {
                     possible_detections = Vec::new();
 
                     for element_index in indexes {
-                        possible_detections.extend(scent.get_possible_detections(chars, element_index));
+                        possible_detections
+                            .extend(scent.get_possible_detections(chars, element_index));
                     }
 
                     if possible_detections.is_empty() {
@@ -166,7 +186,7 @@ impl Scent {
 
                 possible_detections
             }
-            Self::AnyRepetition(scent) => {
+            Self::Repetition(scent, _cast) => {
                 let mut possible_detections = vec![index];
 
                 loop {
@@ -184,4 +204,13 @@ impl Scent {
             }
         }
     }
+}
+
+/// Specifies the how [`Scent::Repetition`] repeats.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Cast {
+    /// [`Scent::Repetition`] will prefer the minimum number of repeats.
+    Minimum,
+    /// [`Scent::Repetition`] will prefer the maximum number of repeats.
+    Maximum,
 }
