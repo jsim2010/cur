@@ -1,7 +1,9 @@
 pull_request_rules:
-  - name: squash standardized prs
+  - name: squash passing PRs with automerge label
     conditions:
-      - status-success=Standardize
+      - label=automerge
+      - status-success=PR / windows-latest - stable (pull_request)
+      - status-success=PR / Validate (pull_request)
     actions:
       merge:
         method: squash
