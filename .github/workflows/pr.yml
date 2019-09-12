@@ -7,11 +7,6 @@ jobs:
     name: windows-latest - stable
     runs-on: windows-latest
     steps:
-      - name: Fail if code was not updated
-        if: github.event.action != 'opened' && github.event.action != 'synchronize'
-        env:
-          GITHUB_EVENT_ACTION: ${{ github.event.action }}
-        run: echo "Event action:" && echo "$GITHUB_EVENT_ACTION" && return 1
       - uses: actions/checkout@v1.0.0
         with:
           fetch-depth: 1
@@ -26,11 +21,13 @@ jobs:
         run: cargo test --verbose
   standardize:
     name: Standardize
-    needs: validate
+    #needs: validate
     runs-on: ubuntu-latest
     steps:
+      - name: Output
+        run: git status
       - name: Fail if not automerging
-        if: github.event.pull_request.user.login != 'jsim2010' && !contains(github.event.pull_request.labels.*.name, 'automerge')
+        if: github.event.pull_request.user.login != 'jsim2010' || !contains(github.event.pull_request.labels.*.name, 'automerge')
         env:
           GITHUB_USER_LOGIN: ${{ github.event.pull_request.user.login }}
           GITHUB_LABEL_NAMES: ${{ github.event.pull_request.labels.*.name }}
@@ -41,8 +38,6 @@ jobs:
         run: cargo install cargo-readme
       - name: Standardize
         run: cargo fmt && cargo readme > README.md
-      - name: Output
-        run: ls
       - name: Commit changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
