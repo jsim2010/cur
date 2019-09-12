@@ -26,10 +26,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v1.0.0
-      - name: Output
-        env:
-          SOURCE_BRANCH: ${{ github.head_ref }}
-        run: git checkout "$SOURCE_BRANCH"
       - name: Fail if not automerging
         if: github.event.pull_request.user.login != 'jsim2010' || !contains(github.event.pull_request.labels.*.name, 'automerge')
         env:
@@ -44,4 +40,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SOURCE_BRANCH: ${{ github.head_ref }}
-        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions" && git add . && git commit -m "Standardize project" --author="Standardizer <jsim2010@gmail.com>" && git push --set-upstream origin "$SOURCE_BRANCH"
+        run: git config --global user.email "actions@github.com" && git config --global user.name "Github Actions" && git add . && git commit -m "Merge and standardize pull request" --author="Standardizer <jsim2010@gmail.com>" && git push --set-upstream origin "$SOURCE_BRANCH"
