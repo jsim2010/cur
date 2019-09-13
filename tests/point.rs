@@ -1,9 +1,9 @@
 use cur::{Cast, Cur, Find, Scent};
 
-/// [`Scent::Clear`] shall point a [`Find`] with index and length of 0.
+/// [`Scent::Absent`] shall point a [`Find`] with index and length of 0.
 #[test]
 fn empty() {
-    let cur = Cur::with_scent(Scent::Clear);
+    let cur = Cur::with_scent(Scent::Absent);
 
     assert_eq!(cur.point(""), Some(Find::new(0, 0)));
     assert_eq!(cur.point("a"), Some(Find::new(0, 0)));
