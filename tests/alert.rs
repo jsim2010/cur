@@ -28,6 +28,7 @@ fn range() {
     assert!(cur.alert("b"));
     assert!(cur.alert("c"));
     assert!(cur.alert("d"));
+    assert!(!cur.alert(""));
     assert!(!cur.alert("a"));
     assert!(!cur.alert("e"));
 }
@@ -90,7 +91,7 @@ fn union_sequences() {
 
 /// [`Scent::Repetition`] of [`Scent::Atom`]s shall alert any repetition of [`Scent::Atom`].
 #[test]
-fn any_repetition() {
+fn repetition() {
     let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a'), Cast::Maximum));
 
     assert!(cur.alert(""));
@@ -105,7 +106,7 @@ fn any_repetition() {
 
 /// [`Scent::Union`] with [`Scent::Repetition`] shall alert when one of the branches matches.
 #[test]
-fn union_with_any_repetition() {
+fn union_with_repetition() {
     let cur = Cur::with_scent(Scent::Union(&[
         Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
         Scent::Atom('b'),
