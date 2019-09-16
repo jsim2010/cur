@@ -140,7 +140,11 @@ impl Scent {
                 }
             }
             Scent::Union(branches) => {
-                lengths.extend(branches.iter().flat_map(|branch| branch.detect_lengths(chars)));
+                lengths.extend(
+                    branches
+                        .iter()
+                        .flat_map(|branch| branch.detect_lengths(chars)),
+                );
             }
             Scent::Sequence(elements) => {
                 let mut indexes = vec![0];
@@ -150,7 +154,12 @@ impl Scent {
 
                     for index in indexes {
                         if let Some(next_chars) = chars.get(index..) {
-                            lengths.extend(element.detect_lengths(next_chars).iter().map(|length| index + length));
+                            lengths.extend(
+                                element
+                                    .detect_lengths(next_chars)
+                                    .iter()
+                                    .map(|length| index + length),
+                            );
                         }
                     }
 
@@ -170,7 +179,12 @@ impl Scent {
 
                     for index in indexes {
                         if let Some(next_chars) = chars.get(index..) {
-                            next_lengths.extend(scent.detect_lengths(next_chars).iter().map(|length| index + length));
+                            next_lengths.extend(
+                                scent
+                                    .detect_lengths(next_chars)
+                                    .iter()
+                                    .map(|length| index + length),
+                            );
                         }
                     }
 

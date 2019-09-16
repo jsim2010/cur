@@ -97,11 +97,20 @@ fn repetition() {
     assert_eq!(cur.point(""), Some(Find::new(0, 0)));
     assert_eq!(cur.point("a"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("aa"), Some(Find::new(0, 2)));
-    assert_eq!(cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), Some(Find::new(0, 67)));
-    assert_eq!(cur.point("b"), Some(Find:: new(0, 0)));
+    assert_eq!(
+        cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        Some(Find::new(0, 67))
+    );
+    assert_eq!(cur.point("b"), Some(Find::new(0, 0)));
     assert_eq!(cur.point("ba"), Some(Find::new(0, 0)));
-    assert_eq!(cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"), Some(Find::new(0, 66)));
-    assert_eq!(cur.point("abaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), Some(Find::new(0, 1)));
+    assert_eq!(
+        cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"),
+        Some(Find::new(0, 66))
+    );
+    assert_eq!(
+        cur.point("abaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        Some(Find::new(0, 1))
+    );
 }
 
 /// [`Scent::Repetition`] with [`Cast::Minimum`] shall point a [`Find`] with index and length of 0.
