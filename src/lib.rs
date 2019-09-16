@@ -49,10 +49,10 @@ extern crate alloc;
 use alloc::{vec, vec::Vec};
 pub use cur_macro::scent;
 
-/// Searches for [`Scent`]s.
+/// Detects a [`Scent`] on a sequence of [`char`]s.
 #[derive(Clone, Copy, Debug)]
 pub struct Cur {
-    /// The [`Scent`] the `cur` is searching for.
+    /// The [`Scent`] to be detected.
     scent: Scent,
 }
 
@@ -62,15 +62,12 @@ impl Cur {
         Self { scent }
     }
 
-    /// Returns if scent matches `cover`.
-    ///
-    /// Note that match only occurs if scent matches with all of `area`.
-    pub fn alert(&self, area: &str) -> bool {
+    /// Returns if `self` is able to detect its [`Scent`] over the entirety of `area`.
+    pub fn indicate(&self, area: &str) -> bool {
         let chars: Vec<char> = area.chars().collect();
-        let possible_detections = self.scent.get_possible_detections(chars.as_slice(), 0);
 
-        for detection in possible_detections {
-            if chars.len() == detection {
+        for length in self.scent.detect_lengths(&chars) {
+            if chars.len() == length {
                 return true;
             }
         }
@@ -78,131 +75,150 @@ impl Cur {
         false
     }
 
-    /// Searches for scent starting at each index of `env`, returning the first successful index.
+    /// Returns the first [`Find`] from `self` attempting to detect its [`Scent`] starting from each consecutive index of `env`.
     ///
-    /// [`None`] indicates there was no successful scent detection.
-    pub fn point(&self, env: &str) -> Option<usize> {
-        let chars: Vec<char> = env.chars().collect();
+    /// [`None`] indicates the [`Scent`] cannot be detected starting from any index in `env`.
+    pub fn point(&self, env: &str) -> Option<Find> {
+        let chars_vec: Vec<char> = env.chars().collect();
+        let chars = &mut chars_vec.iter();
+        let mut index = 0;
 
-        if let Scent::Clear = self.scent {
-            if chars.is_empty() {
-                Some(0)
+        loop {
+            if let Some(length) = self.scent.detect_lengths(chars.as_slice()).first() {
+                return Some(Find::new(index, *length));
+            }
+
+            if chars.next().is_none() {
+                break;
             } else {
-                None
+                index += 1;
             }
-        } else {
-            let mut index = 0;
-
-            for target in 0..chars.len() {
-                if self
-                    .scent
-                    .get_possible_detections(&chars, target)
-                    .is_empty()
-                {
-                    index += 1;
-                } else {
-                    return Some(index);
-                }
-            }
-
-            None
         }
+
+        None
     }
 }
 
-/// Represents a pattern to be matched against.
+/// Signifies a pattern that is detectable on a sequence of [`char`]s.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Scent {
-    /// Matches an empty string.
-    Clear,
-    /// Matches a single [`char`].
+    /// Detectable on an empty sequence.
+    Absent,
+    /// Detectable on a single [`char`] equal to the given [`char`].
     Atom(char),
-    /// Matches any [`char`] inclusively between the two given.
+    /// Detectable on a single [`char`] equal to or in between the given [`char`]s.
     Range(char, char),
-    /// Matches any given [`Scent`].
+    /// Detectable when any of the given [`Scent`]s is detectable.
     ///
-    /// Matches are attempted in the order of the [`Vec`].
+    /// Detections are attempted according to the order of the given [`Scent`]s.
     Union(&'static [Scent]),
-    /// Matches each given [`Scent`] in the order of the [`Vec`].
+    /// Detectable when each of the given [`Scent`]s is detectable in order.
     Sequence(&'static [Scent]),
-    /// Matches any number of repetitions of the given [`Scent`], including 0.
+    /// Detectable when any number of repetititons of the given [`Scent`] is detected.
     ///
-    /// If the given [`Cast`] is [`Cast::Minimal`], will first match with the fewest number of repetitions. Otherwise, will first match with the greatest number of repetitions.
+    /// It is valid to detect 0 repetitions, which is equivalent to [`Scent::Absent`]. If 1 or more repetitions are detectable, their order shall be determined by the given [`Cast`].
     Repetition(&'static Scent, Cast),
 }
 
 impl Scent {
-    /// Return all possible detections of `self` in starting from `index` of `chars`.
-    ///
-    /// A detection is the first index after the match.
-    pub fn get_possible_detections(&self, chars: &[char], mut index: usize) -> Vec<usize> {
+    /// Returns the lengths of each successful detection of `self` on `chars`.
+    fn detect_lengths(&self, chars: &[char]) -> Vec<usize> {
+        let mut lengths = Vec::new();
+
         match self {
-            Self::Clear => vec![index],
-            Self::Atom(c) => {
-                if chars.get(index) == Some(c) {
-                    index += 1;
-                    vec![index]
-                } else {
-                    vec![]
+            Scent::Absent => lengths.push(0),
+            Scent::Atom(c) => {
+                if chars.first() == Some(c) {
+                    lengths.push(1);
                 }
             }
-            Self::Range(start, end) => {
-                if let Some(c) = chars.get(index) {
+            Scent::Range(start, end) => {
+                if let Some(c) = chars.first() {
                     if (start..=end).contains(&c) {
-                        index += 1;
-                        return vec![index];
+                        lengths.push(1);
                     }
                 }
-
-                vec![]
             }
-            Self::Union(branches) => {
-                let mut possible_detections = Vec::new();
-
-                for branch in branches.iter() {
-                    possible_detections.extend(branch.get_possible_detections(chars, index));
-                }
-
-                possible_detections
+            Scent::Union(branches) => {
+                lengths.extend(
+                    branches
+                        .iter()
+                        .flat_map(|branch| branch.detect_lengths(chars)),
+                );
             }
-            Self::Sequence(elements) => {
-                let mut indexes = vec![index];
-                let mut possible_detections = Vec::new();
+            Scent::Sequence(elements) => {
+                let mut indexes = vec![0];
 
-                for scent in elements.iter() {
-                    possible_detections = Vec::new();
+                for element in elements.iter() {
+                    lengths = Vec::new();
 
-                    for element_index in indexes {
-                        possible_detections
-                            .extend(scent.get_possible_detections(chars, element_index));
+                    for index in indexes {
+                        if let Some(next_chars) = chars.get(index..) {
+                            lengths.extend(
+                                element
+                                    .detect_lengths(next_chars)
+                                    .iter()
+                                    .map(|length| index + length),
+                            );
+                        }
                     }
 
-                    if possible_detections.is_empty() {
+                    if lengths.is_empty() {
                         break;
                     } else {
-                        indexes = possible_detections.clone();
+                        indexes = lengths.clone();
                     }
                 }
-
-                possible_detections
             }
-            Self::Repetition(scent, _cast) => {
-                let mut possible_detections = vec![index];
+            Scent::Repetition(scent, cast) => {
+                let mut indexes = vec![0];
+                lengths.push(0);
 
                 loop {
-                    let next_detections = scent.get_possible_detections(chars, index);
+                    let mut next_lengths = Vec::new();
 
-                    if let Some(detection) = next_detections.last() {
-                        index = *detection;
-                        possible_detections.extend(next_detections);
-                    } else {
+                    for index in indexes {
+                        if let Some(next_chars) = chars.get(index..) {
+                            next_lengths.extend(
+                                scent
+                                    .detect_lengths(next_chars)
+                                    .iter()
+                                    .map(|length| index + length),
+                            );
+                        }
+                    }
+
+                    if next_lengths.is_empty() {
                         break;
+                    } else {
+                        indexes = next_lengths.clone();
+                        lengths.extend(next_lengths);
                     }
                 }
 
-                possible_detections
+                if *cast == Cast::Maximum {
+                    lengths.reverse();
+                }
             }
         }
+
+        lengths
+    }
+}
+
+/// Signifies the location of a detection.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Find {
+    /// The index of the start of the detection.
+    index: usize,
+    /// The length of the detection.
+    length: usize,
+}
+
+impl Find {
+    /// Creates a [`Find`].
+    pub const fn new(index: usize, length: usize) -> Self {
+        Self { index, length }
     }
 }
 
