@@ -16,7 +16,7 @@ fn char() {
 
     assert_eq!(cur.point("a"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("ab"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("ba"), Some(Find::new(1, 1)));
+    assert_eq!(cur.point("ba"), Some(Find::new(1, 2)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("b"), None);
 }
@@ -29,7 +29,7 @@ fn range() {
     assert_eq!(cur.point("b"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("cc"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("de"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("ad"), Some(Find::new(1, 1)));
+    assert_eq!(cur.point("ad"), Some(Find::new(1, 2)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("a"), None);
     assert_eq!(cur.point("e"), None);
@@ -47,7 +47,7 @@ fn union_of_chars() {
     assert_eq!(cur.point("a"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("bb"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("cd"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("ea"), Some(Find::new(1, 1)));
+    assert_eq!(cur.point("ea"), Some(Find::new(1, 2)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("d"), None);
 }
@@ -63,7 +63,7 @@ fn sequence_of_chars() {
 
     assert_eq!(cur.point("abc"), Some(Find::new(0, 3)));
     assert_eq!(cur.point("abcd"), Some(Find::new(0, 3)));
-    assert_eq!(cur.point("dabc"), Some(Find::new(1, 3)));
+    assert_eq!(cur.point("dabc"), Some(Find::new(1, 4)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("a"), None);
     assert_eq!(cur.point("ab"), None);
@@ -83,7 +83,7 @@ fn union_sequences() {
     assert_eq!(cur.point("de"), Some(Find::new(0, 2)));
     assert_eq!(cur.point("f"), Some(Find::new(0, 1)));
     assert_eq!(cur.point("fd"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("df"), Some(Find::new(1, 1)));
+    assert_eq!(cur.point("df"), Some(Find::new(1, 2)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("ab"), None);
     assert_eq!(cur.point("d"), None);
@@ -136,7 +136,7 @@ fn sequence_repetition_and_repeat() {
     assert_eq!(cur.point("aa"), Some(Find::new(0, 2)));
     assert_eq!(cur.point("aaa"), Some(Find::new(0, 3)));
     assert_eq!(cur.point("ab"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("ba"), Some(Find::new(1, 1)));
+    assert_eq!(cur.point("ba"), Some(Find::new(1, 2)));
     assert_eq!(cur.point(""), None);
     assert_eq!(cur.point("b"), None);
 }
