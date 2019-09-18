@@ -47,6 +47,7 @@
 extern crate alloc;
 
 use alloc::{vec, vec::Vec};
+use core::str::Chars;
 pub use cur_macro::scent;
 
 /// Detects a [`Scent`] on a sequence of [`char`]s.
@@ -64,10 +65,8 @@ impl Cur {
 
     /// Returns if `self` is able to detect its [`Scent`] over the entirety of `area`.
     pub fn indicate(&self, area: &str) -> bool {
-        let chars: Vec<char> = area.chars().collect();
-
-        for length in self.scent.detect_lengths(&chars) {
-            if chars.len() == length {
+        for trail in self.scent.follow_trail(Trail::new(area.chars())) {
+            if trail.is_end() {
                 return true;
             }
         }
@@ -79,19 +78,17 @@ impl Cur {
     ///
     /// [`None`] indicates the [`Scent`] cannot be detected starting from any index in `env`.
     pub fn point(&self, env: &str) -> Option<Find> {
-        let chars_vec: Vec<char> = env.chars().collect();
-        let chars = &mut chars_vec.iter();
-        let mut index = 0;
+        let mut trail = Trail::new(env.chars());
 
         loop {
-            if let Some(length) = self.scent.detect_lengths(chars.as_slice()).first() {
-                return Some(Find::new(index, *length));
+            if let Some(end_trail) = self.scent.follow_trail(trail.clone()).first() {
+                return Some(Find::new(trail.index, end_trail.index));
             }
 
-            if chars.next().is_none() {
-                break;
+            if let Some(c) = trail.next() {
+                trail.follow(c);
             } else {
-                index += 1;
+                break;
             }
         }
 
@@ -121,88 +118,109 @@ pub enum Scent {
 }
 
 impl Scent {
-    /// Returns the lengths of each successful detection of `self` on `chars`.
-    fn detect_lengths(&self, chars: &[char]) -> Vec<usize> {
-        let mut lengths = Vec::new();
+    /// Returns the [`Trail`]s of successful attempts to detect `self` along `trail`.
+    fn follow_trail<'a>(&self, mut trail: Trail<'a>) -> Vec<Trail<'a>> {
+        let mut trails = Vec::new();
 
         match self {
-            Scent::Absent => lengths.push(0),
+            Scent::Absent => trails.push(trail),
             Scent::Atom(c) => {
-                if chars.first() == Some(c) {
-                    lengths.push(1);
+                if trail.next() == Some(*c) {
+                    trail.follow(*c);
+                    trails.push(trail);
                 }
             }
             Scent::Range(start, end) => {
-                if let Some(c) = chars.first() {
-                    if (start..=end).contains(&c) {
-                        lengths.push(1);
+                if let Some(c) = trail.next() {
+                    if (start..=end).contains(&&c) {
+                        trail.follow(c);
+                        trails.push(trail);
                     }
                 }
             }
             Scent::Union(branches) => {
-                lengths.extend(
+                trails.extend(
                     branches
                         .iter()
-                        .flat_map(|branch| branch.detect_lengths(chars)),
+                        .flat_map(|branch| branch.follow_trail(trail.clone())),
                 );
             }
             Scent::Sequence(elements) => {
-                let mut indexes = vec![0];
+                trails.push(trail);
 
                 for element in elements.iter() {
-                    lengths = Vec::new();
-
-                    for index in indexes {
-                        if let Some(next_chars) = chars.get(index..) {
-                            lengths.extend(
-                                element
-                                    .detect_lengths(next_chars)
-                                    .iter()
-                                    .map(|length| index + length),
-                            );
-                        }
-                    }
-
-                    if lengths.is_empty() {
+                    if trails.is_empty() {
                         break;
                     } else {
-                        indexes = lengths.clone();
+                        let hot_trails = trails.clone();
+                        trails.clear();
+
+                        for trail in hot_trails {
+                            trails.extend(element.follow_trail(trail));
+                        }
                     }
                 }
             }
             Scent::Repetition(scent, cast) => {
-                let mut indexes = vec![0];
-                lengths.push(0);
+                let mut hot_trails = vec![trail.clone()];
+                trails.push(trail);
 
                 loop {
-                    let mut next_lengths = Vec::new();
+                    let mut next_trails = Vec::new();
 
-                    for index in indexes {
-                        if let Some(next_chars) = chars.get(index..) {
-                            next_lengths.extend(
-                                scent
-                                    .detect_lengths(next_chars)
-                                    .iter()
-                                    .map(|length| index + length),
-                            );
-                        }
+                    for trail in hot_trails {
+                        next_trails.extend(scent.follow_trail(trail));
                     }
 
-                    if next_lengths.is_empty() {
+                    if next_trails.is_empty() {
                         break;
                     } else {
-                        indexes = next_lengths.clone();
-                        lengths.extend(next_lengths);
+                        hot_trails = next_trails.clone();
+                        trails.extend(next_trails);
                     }
                 }
 
                 if *cast == Cast::Maximum {
-                    lengths.reverse();
+                    trails.reverse();
                 }
             }
         }
 
-        lengths
+        trails
+    }
+}
+
+/// Iterates over [`char`]s while tracking how far it has traveled.
+#[derive(Clone)]
+struct Trail<'a> {
+    /// An [`Iterator`] over the remaining chars to be detected.
+    chars: Chars<'a>,
+    /// The index, in bytes (not chars), that has already been followed.
+    index: usize,
+}
+
+impl<'a> Trail<'a> {
+    /// Creates a new `Trail` starting at the beginning of `chars`;
+    const fn new(chars: Chars<'a>) -> Self {
+        Self { chars, index: 0 }
+    }
+
+    /// Returns if `self` has no more chars.
+    fn is_end(&self) -> bool {
+        self.chars.clone().next().is_none()
+    }
+
+    /// Increments index of `self` by the number of bytes occupied by 'c'.
+    fn follow(&mut self, c: char) {
+        self.index += c.len_utf8();
+    }
+}
+
+impl<'a> Iterator for Trail<'a> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.chars.next()
     }
 }
 
@@ -210,15 +228,15 @@ impl Scent {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Find {
     /// The index of the start of the detection.
-    index: usize,
-    /// The length of the detection.
-    length: usize,
+    start: usize,
+    /// The index of the end of the detection.
+    end: usize,
 }
 
 impl Find {
     /// Creates a [`Find`].
-    pub const fn new(index: usize, length: usize) -> Self {
-        Self { index, length }
+    pub const fn new(start: usize, end: usize) -> Self {
+        Self { start, end }
     }
 }
 
