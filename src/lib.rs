@@ -65,7 +65,7 @@ impl Cur {
 
     /// Returns if `self` is able to detect its [`Scent`] over the entirety of `area`.
     pub fn indicate(&self, area: &str) -> bool {
-        for tracks in self.scent.follow_trail(Tracks::new(area.chars())) {
+        for tracks in self.scent.follow_tracks(Tracks::new(area.chars())) {
             if tracks.is_end() {
                 return true;
             }
@@ -81,7 +81,7 @@ impl Cur {
         let mut tracks = Tracks::new(env.chars());
 
         loop {
-            if let Some(end_tracks) = self.scent.follow_trail(tracks.clone()).first() {
+            if let Some(end_tracks) = self.scent.follow_tracks(tracks.clone()).first() {
                 return Some(Find::new(tracks.index, end_tracks.index));
             }
 
@@ -120,7 +120,7 @@ pub enum Scent {
 
 impl Scent {
     /// Returns the [`Tracks`]s of successful attempts to detect `self` along `tracks`.
-    fn follow_trail<'a>(&self, mut tracks: Tracks<'a>) -> Vec<Tracks<'a>> {
+    fn follow_tracks<'a>(&self, mut tracks: Tracks<'a>) -> Vec<Tracks<'a>> {
         let mut new_tracks = Vec::new();
 
         match self {
@@ -143,7 +143,7 @@ impl Scent {
                 new_tracks.extend(
                     branches
                         .iter()
-                        .flat_map(|branch| branch.follow_trail(tracks.clone())),
+                        .flat_map(|branch| branch.follow_tracks(tracks.clone())),
                 );
             }
             Scent::Sequence(elements) => {
@@ -153,31 +153,31 @@ impl Scent {
                     if new_tracks.is_empty() {
                         break;
                     } else {
-                        let hot_trails = new_tracks.clone();
+                        let current_tracks = new_tracks.clone();
                         new_tracks.clear();
 
-                        for trail in hot_trails {
-                            new_tracks.extend(element.follow_trail(trail));
+                        for current_track in current_tracks {
+                            new_tracks.extend(element.follow_tracks(current_track));
                         }
                     }
                 }
             }
             Scent::Repetition(scent) => {
-                let mut hot_trails = vec![tracks.clone()];
+                let mut current_tracks = vec![tracks.clone()];
                 new_tracks.push(tracks);
 
                 loop {
-                    let mut next_trails = Vec::new();
+                    let mut next_tracks = Vec::new();
 
-                    for trail in hot_trails {
-                        next_trails.extend(scent.follow_trail(trail));
+                    for current_track in current_tracks {
+                        next_tracks.extend(scent.follow_tracks(current_track));
                     }
 
-                    if next_trails.is_empty() {
+                    if next_tracks.is_empty() {
                         break;
                     } else {
-                        hot_trails = next_trails.clone();
-                        new_tracks.extend(next_trails);
+                        current_tracks = next_tracks.clone();
+                        new_tracks.extend(next_tracks);
                     }
                 }
             }
