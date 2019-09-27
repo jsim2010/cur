@@ -1,4 +1,4 @@
-use cur::{Cast, Cur, Scent};
+use cur::{Cur, Scent};
 
 /// [`Scent::Absent`] shall indicate an empty string.
 #[test]
@@ -92,7 +92,7 @@ fn union_sequences() {
 /// [`Scent::Repetition`] of [`Scent::Atom`]s shall indicate any repetition of [`Scent::Atom`].
 #[test]
 fn repetition() {
-    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a'), Cast::Maximum));
+    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a')));
 
     assert!(cur.indicate(""));
     assert!(cur.indicate("a"));
@@ -108,7 +108,7 @@ fn repetition() {
 #[test]
 fn union_with_repetition() {
     let cur = Cur::with_scent(Scent::Union(&[
-        Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
+        Scent::Repetition(&Scent::Atom('a')),
         Scent::Atom('b'),
     ]));
 
@@ -124,7 +124,7 @@ fn union_with_repetition() {
 #[test]
 fn sequence_any_repetition_and_repeat() {
     let cur = Cur::with_scent(Scent::Sequence(&[
-        Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
+        Scent::Repetition(&Scent::Atom('a')),
         Scent::Atom('a'),
     ]));
 

@@ -1,4 +1,4 @@
-use cur::{Cast, Cur, Find, Scent};
+use cur::{Cur, Find, Scent};
 
 /// [`Scent::Absent`] shall point a [`Find`] with index and length of 0.
 #[test]
@@ -89,34 +89,10 @@ fn union_sequences() {
     assert_eq!(cur.point("d"), None);
 }
 
-/// [`Scent::Repetition`] of a [`Scent::Atom`] with [`Cast::Maximum`] shall point the longest of the first [`Find`]s.
-#[test]
-fn repetition() {
-    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a'), Cast::Maximum));
-
-    assert_eq!(cur.point(""), Some(Find::new(0, 0)));
-    assert_eq!(cur.point("a"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("aa"), Some(Find::new(0, 2)));
-    assert_eq!(
-        cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        Some(Find::new(0, 67))
-    );
-    assert_eq!(cur.point("b"), Some(Find::new(0, 0)));
-    assert_eq!(cur.point("ba"), Some(Find::new(0, 0)));
-    assert_eq!(
-        cur.point("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab"),
-        Some(Find::new(0, 66))
-    );
-    assert_eq!(
-        cur.point("abaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
-        Some(Find::new(0, 1))
-    );
-}
-
-/// [`Scent::Repetition`] with [`Cast::Minimum`] shall point a [`Find`] with index and length of 0.
+/// [`Scent::Repetition`] shall point a [`Find`] with start and end of 0.
 #[test]
 fn min_repetition() {
-    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a'), Cast::Minimum));
+    let cur = Cur::with_scent(Scent::Repetition(&Scent::Atom('a')));
 
     assert_eq!(cur.point(""), Some(Find::new(0, 0)));
     assert_eq!(cur.point("a"), Some(Find::new(0, 0)));
@@ -128,15 +104,19 @@ fn min_repetition() {
 #[test]
 fn sequence_repetition_and_repeat() {
     let cur = Cur::with_scent(Scent::Sequence(&[
-        Scent::Repetition(&Scent::Atom('a'), Cast::Maximum),
-        Scent::Atom('a'),
+        Scent::Atom('b'),
+        Scent::Repetition(&Scent::Atom('a')),
+        Scent::Atom('b'),
     ]));
 
-    assert_eq!(cur.point("a"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("aa"), Some(Find::new(0, 2)));
-    assert_eq!(cur.point("aaa"), Some(Find::new(0, 3)));
-    assert_eq!(cur.point("ab"), Some(Find::new(0, 1)));
-    assert_eq!(cur.point("ba"), Some(Find::new(1, 2)));
+    assert_eq!(cur.point("bb"), Some(Find::new(0, 2)));
+    assert_eq!(cur.point("bab"), Some(Find::new(0, 3)));
+    assert_eq!(cur.point("baab"), Some(Find::new(0, 4)));
+    assert_eq!(cur.point("bba"), Some(Find::new(0, 2)));
+    assert_eq!(cur.point("abab"), Some(Find::new(1, 4)));
     assert_eq!(cur.point(""), None);
+    assert_eq!(cur.point("a"), None);
     assert_eq!(cur.point("b"), None);
+    assert_eq!(cur.point("ba"), None);
+    assert_eq!(cur.point("baa"), None);
 }
