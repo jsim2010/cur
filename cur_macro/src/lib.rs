@@ -47,7 +47,7 @@
 extern crate alloc;
 extern crate proc_macro;
 
-use alloc::{boxed::Box, vec, vec::Vec, string::ToString};
+use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
 use core::convert::{TryFrom, TryInto};
 use proc_macro::TokenStream;
 use proc_macro2::{
@@ -59,8 +59,8 @@ use syn::{
     parse_macro_input, Ident, ItemConst,
 };
 use syn::{
-    BinOp, Error, Expr, ExprBinary, ExprIndex, ExprPath, ExprRange, ExprTry, Lit,
-    RangeLimits, Path, Visibility,
+    BinOp, Error, Expr, ExprBinary, ExprIndex, ExprPath, ExprRange, ExprTry, Lit, Path,
+    RangeLimits, Visibility,
 };
 
 /// Converts `item` into a `cur::Scent`.
@@ -399,7 +399,7 @@ impl TryFrom<ExprPath> for ScentBuilder {
                 return Ok(Self::Absent);
             }
         }
-        
+
         Ok(Self::Path(value.path))
     }
 }
@@ -433,9 +433,7 @@ impl TryFrom<Lit> for ScentBuilder {
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
             Lit::Char(c) => Ok(Self::Atom(c.value())),
-            Lit::Str(s) => Ok(Self::Sequence(
-                s.value().chars().map(Self::Atom).collect(),
-            )),
+            Lit::Str(s) => Ok(Self::Sequence(s.value().chars().map(Self::Atom).collect())),
             Lit::ByteStr(..)
             | Lit::Byte(..)
             | Lit::Int(..)

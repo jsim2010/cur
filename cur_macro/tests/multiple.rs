@@ -26,7 +26,10 @@ fn union() {
     #[scent]
     const DIGIT_OR_A: Scent = 'a' | DIGIT;
 
-    assert_eq!(DIGIT_OR_A, Scent::Union(&[Scent::Atom('a'), Scent::Range('0', '9')]));
+    assert_eq!(
+        DIGIT_OR_A,
+        Scent::Union(&[Scent::Atom('a'), Scent::Range('0', '9')])
+    );
 }
 
 /// A sequence.
@@ -35,7 +38,10 @@ fn sequence() {
     #[scent]
     const DIGIT_AND_A: Scent = DIGIT + 'a';
 
-    assert_eq!(DIGIT_AND_A, Scent::Sequence(&[Scent::Range('0', '9'), Scent::Atom('a')]));
+    assert_eq!(
+        DIGIT_AND_A,
+        Scent::Sequence(&[Scent::Range('0', '9'), Scent::Atom('a')])
+    );
 }
 
 /// A option.
@@ -44,7 +50,10 @@ fn option() {
     #[scent]
     const OPTIONAL_DIGIT: Scent = DIGIT?;
 
-    assert_eq!(OPTIONAL_DIGIT, Scent::Union(&[Scent::Absent, Scent::Range('0', '9')]));
+    assert_eq!(
+        OPTIONAL_DIGIT,
+        Scent::Union(&[Scent::Absent, Scent::Range('0', '9')])
+    );
 }
 
 /// A repetition.
@@ -53,7 +62,10 @@ fn repetition() {
     #[scent]
     const ZERO_OR_MORE_DIGITS: Scent = DIGIT[..];
 
-    assert_eq!(ZERO_OR_MORE_DIGITS, Scent::Repetition(&Scent::Range('0', '9')));
+    assert_eq!(
+        ZERO_OR_MORE_DIGITS,
+        Scent::Repetition(&Scent::Range('0', '9'))
+    );
 }
 
 /// A path.
@@ -62,5 +74,8 @@ fn path() {
     #[scent]
     const ALPHANUM: Scent = DIGIT | scents::LOWERCASE;
 
-    assert_eq!(ALPHANUM, Scent::Union(&[Scent::Range('0', '9'), Scent::Range('a', 'z')]));
+    assert_eq!(
+        ALPHANUM,
+        Scent::Union(&[Scent::Range('0', '9'), Scent::Range('a', 'z')])
+    );
 }

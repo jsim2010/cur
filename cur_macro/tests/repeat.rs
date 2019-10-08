@@ -1,4 +1,4 @@
-use cur::{Scent};
+use cur::Scent;
 use cur_macro::scent;
 
 /// Try.
@@ -28,10 +28,7 @@ fn zero_or_more() {
     #[scent]
     const ZERO_OR_MORE: Scent = 'a'[..];
 
-    assert_eq!(
-        ZERO_OR_MORE,
-        Scent::Repetition(&Scent::Atom('a'))
-    );
+    assert_eq!(ZERO_OR_MORE, Scent::Repetition(&Scent::Atom('a')));
 }
 
 /// Index with RangeFrom.
@@ -170,9 +167,7 @@ fn repeat_sequence() {
         Scent::Sequence(&[
             Scent::Atom('a'),
             Scent::Atom('b'),
-            Scent::Repetition(
-                &Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b')]),
-            )
+            Scent::Repetition(&Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b')]),)
         ])
     );
 }
