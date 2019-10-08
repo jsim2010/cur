@@ -35,12 +35,12 @@
 // box_pointers: Boxes are generally okay.
 // single_use_lifetimes: There are issues with derived traits.
 #![allow(
-    clippy::fallible_impl_from, // Above lints assume a given use; issues should be detected by tests or other lints.
+    clippy::fallible_impl_from, // Assumes a specific use; issues should be detected by tests or other lints.
     clippy::implicit_return, // Omitting the return keyword is idiomatic Rust code.
     clippy::missing_inline_in_public_items, // There are issues with derived traits.
     clippy::multiple_crate_versions, // Not always possible to resolve.
-    clippy::suspicious_arithmetic_impl, // Assumes a specific use; issues should be detected by tests.
-    clippy::suspicious_op_assign_impl, // Assumes a specific use; issues should be detected by tests.
+    clippy::suspicious_arithmetic_impl, // Assumes a specific use; issues should be detected by tests or other lints.
+    clippy::suspicious_op_assign_impl, // Assumes a specific use; issues should be detected by tests or other lints.
 )]
 #![no_std]
 
@@ -124,14 +124,14 @@ impl Scent {
         let mut new_tracks = Vec::new();
 
         match self {
-            Scent::Absent => new_tracks.push(tracks),
-            Scent::Atom(c) => {
+            Self::Absent => new_tracks.push(tracks),
+            Self::Atom(c) => {
                 if tracks.next() == Some(*c) {
                     tracks.step(*c);
                     new_tracks.push(tracks);
                 }
             }
-            Scent::Range(start, end) => {
+            Self::Range(start, end) => {
                 if let Some(c) = tracks.next() {
                     if (start..=end).contains(&&c) {
                         tracks.step(c);
@@ -139,14 +139,14 @@ impl Scent {
                     }
                 }
             }
-            Scent::Union(branches) => {
+            Self::Union(branches) => {
                 new_tracks.extend(
                     branches
                         .iter()
                         .flat_map(|branch| branch.follow_tracks(tracks.clone())),
                 );
             }
-            Scent::Sequence(elements) => {
+            Self::Sequence(elements) => {
                 new_tracks.push(tracks);
 
                 for element in elements.iter() {
@@ -162,7 +162,7 @@ impl Scent {
                     }
                 }
             }
-            Scent::Repetition(scent) => {
+            Self::Repetition(scent) => {
                 let mut current_tracks = vec![tracks.clone()];
                 new_tracks.push(tracks);
 
