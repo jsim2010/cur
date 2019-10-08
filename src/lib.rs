@@ -35,12 +35,12 @@
 // box_pointers: Boxes are generally okay.
 // single_use_lifetimes: There are issues with derived traits.
 #![allow(
-    clippy::fallible_impl_from, // Above lints assume a given use; issues should be detected by tests or other lints.
+    clippy::fallible_impl_from, // Assumes a specific use; issues should be detected by tests or other lints.
     clippy::implicit_return, // Omitting the return keyword is idiomatic Rust code.
     clippy::missing_inline_in_public_items, // There are issues with derived traits.
     clippy::multiple_crate_versions, // Not always possible to resolve.
-    clippy::suspicious_arithmetic_impl, // Assumes a specific use; issues should be detected by tests.
-    clippy::suspicious_op_assign_impl, // Assumes a specific use; issues should be detected by tests.
+    clippy::suspicious_arithmetic_impl, // Assumes a specific use; issues should be detected by tests or other lints.
+    clippy::suspicious_op_assign_impl, // Assumes a specific use; issues should be detected by tests or other lints.
 )]
 #![no_std]
 
@@ -65,8 +65,8 @@ impl Cur {
 
     /// Returns if `self` is able to detect its [`Scent`] over the entirety of `area`.
     pub fn indicate(&self, area: &str) -> bool {
-        for trail in self.scent.follow_trail(Trail::new(area.chars())) {
-            if trail.is_end() {
+        for tracks in self.scent.follow_tracks(Tracks::new(area.chars())) {
+            if tracks.is_end() {
                 return true;
             }
         }
@@ -78,15 +78,15 @@ impl Cur {
     ///
     /// [`None`] indicates the [`Scent`] cannot be detected starting from any index in `env`.
     pub fn point(&self, env: &str) -> Option<Find> {
-        let mut trail = Trail::new(env.chars());
+        let mut tracks = Tracks::new(env.chars());
 
         loop {
-            if let Some(end_trail) = self.scent.follow_trail(trail.clone()).first() {
-                return Some(Find::new(trail.index, end_trail.index));
+            if let Some(end_tracks) = self.scent.follow_tracks(tracks.clone()).first() {
+                return Some(Find::new(tracks.index, end_tracks.index));
             }
 
-            if let Some(c) = trail.next() {
-                trail.follow(c);
+            if let Some(c) = tracks.next() {
+                tracks.step(c);
             } else {
                 break;
             }
@@ -113,94 +113,91 @@ pub enum Scent {
     Sequence(&'static [Scent]),
     /// Detectable when any number of repetititons of the given [`Scent`] is detected.
     ///
-    /// It is valid to detect 0 repetitions, which is equivalent to [`Scent::Absent`]. If 1 or more repetitions are detectable, their order shall be determined by the given [`Cast`].
-    Repetition(&'static Scent, Cast),
+    /// Detections are attempted starting with 0 repetitions and incrementing as high as
+    /// possible.
+    Repetition(&'static Scent),
 }
 
 impl Scent {
-    /// Returns the [`Trail`]s of successful attempts to detect `self` along `trail`.
-    fn follow_trail<'a>(&self, mut trail: Trail<'a>) -> Vec<Trail<'a>> {
-        let mut trails = Vec::new();
+    /// Returns the [`Tracks`]s of successful attempts to detect `self` along `tracks`.
+    fn follow_tracks<'a>(&self, mut tracks: Tracks<'a>) -> Vec<Tracks<'a>> {
+        let mut new_tracks = Vec::new();
 
         match self {
-            Scent::Absent => trails.push(trail),
-            Scent::Atom(c) => {
-                if trail.next() == Some(*c) {
-                    trail.follow(*c);
-                    trails.push(trail);
+            Self::Absent => new_tracks.push(tracks),
+            Self::Atom(c) => {
+                if tracks.next() == Some(*c) {
+                    tracks.step(*c);
+                    new_tracks.push(tracks);
                 }
             }
-            Scent::Range(start, end) => {
-                if let Some(c) = trail.next() {
+            Self::Range(start, end) => {
+                if let Some(c) = tracks.next() {
                     if (start..=end).contains(&&c) {
-                        trail.follow(c);
-                        trails.push(trail);
+                        tracks.step(c);
+                        new_tracks.push(tracks);
                     }
                 }
             }
-            Scent::Union(branches) => {
-                trails.extend(
+            Self::Union(branches) => {
+                new_tracks.extend(
                     branches
                         .iter()
-                        .flat_map(|branch| branch.follow_trail(trail.clone())),
+                        .flat_map(|branch| branch.follow_tracks(tracks.clone())),
                 );
             }
-            Scent::Sequence(elements) => {
-                trails.push(trail);
+            Self::Sequence(elements) => {
+                new_tracks.push(tracks);
 
                 for element in elements.iter() {
-                    if trails.is_empty() {
+                    if new_tracks.is_empty() {
                         break;
                     } else {
-                        let hot_trails = trails.clone();
-                        trails.clear();
+                        let current_tracks = new_tracks.clone();
+                        new_tracks.clear();
 
-                        for trail in hot_trails {
-                            trails.extend(element.follow_trail(trail));
+                        for current_track in current_tracks {
+                            new_tracks.extend(element.follow_tracks(current_track));
                         }
                     }
                 }
             }
-            Scent::Repetition(scent, cast) => {
-                let mut hot_trails = vec![trail.clone()];
-                trails.push(trail);
+            Self::Repetition(scent) => {
+                let mut current_tracks = vec![tracks.clone()];
+                new_tracks.push(tracks);
 
                 loop {
-                    let mut next_trails = Vec::new();
+                    let mut next_tracks = Vec::new();
 
-                    for trail in hot_trails {
-                        next_trails.extend(scent.follow_trail(trail));
+                    for current_track in current_tracks {
+                        next_tracks.extend(scent.follow_tracks(current_track));
                     }
 
-                    if next_trails.is_empty() {
+                    if next_tracks.is_empty() {
                         break;
                     } else {
-                        hot_trails = next_trails.clone();
-                        trails.extend(next_trails);
+                        current_tracks = next_tracks.clone();
+                        new_tracks.extend(next_tracks);
                     }
-                }
-
-                if *cast == Cast::Maximum {
-                    trails.reverse();
                 }
             }
         }
 
-        trails
+        new_tracks
     }
 }
 
 /// Iterates over [`char`]s while tracking how far it has traveled.
 #[derive(Clone)]
-struct Trail<'a> {
+struct Tracks<'a> {
     /// An [`Iterator`] over the remaining chars to be detected.
     chars: Chars<'a>,
     /// The index, in bytes (not chars), that has already been followed.
     index: usize,
 }
 
-impl<'a> Trail<'a> {
-    /// Creates a new `Trail` starting at the beginning of `chars`;
+impl<'a> Tracks<'a> {
+    /// Creates a new `Tracks` starting at the beginning of `chars`;
     const fn new(chars: Chars<'a>) -> Self {
         Self { chars, index: 0 }
     }
@@ -211,12 +208,12 @@ impl<'a> Trail<'a> {
     }
 
     /// Increments index of `self` by the number of bytes occupied by 'c'.
-    fn follow(&mut self, c: char) {
+    fn step(&mut self, c: char) {
         self.index += c.len_utf8();
     }
 }
 
-impl<'a> Iterator for Trail<'a> {
+impl<'a> Iterator for Tracks<'a> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -238,13 +235,4 @@ impl Find {
     pub const fn new(start: usize, end: usize) -> Self {
         Self { start, end }
     }
-}
-
-/// Specifies the how [`Scent::Repetition`] repeats.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Cast {
-    /// [`Scent::Repetition`] will prefer the minimum number of repeats.
-    Minimum,
-    /// [`Scent::Repetition`] will prefer the maximum number of repeats.
-    Maximum,
 }
