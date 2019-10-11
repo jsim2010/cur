@@ -1,3 +1,4 @@
+#![allow(clippy::cognitive_complexity)] // This is unavoidable in certain tests.
 use cur::{Cur, Game};
 
 macro_rules! assert_find {
