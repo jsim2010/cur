@@ -50,8 +50,12 @@ use alloc::{collections::BTreeMap, vec, vec::Vec};
 use core::str::Chars;
 pub use cur_macro::game;
 
-/// Returns all possible finish [`Spot`]s that match `game` beginning from `start`.
-fn hunt<'l, 'c>(game: Game, mut start: Spot<'l>, captures: &mut Captures<'l, 'c>) -> Vec<Spot<'l>> {
+/// Returns [`Iterator`] of all finish [`Spot`]s that match `game` beginning from `start`.
+fn hunt<'l, 'c>(
+    game: Game,
+    mut start: Spot<'l>,
+    captures: &mut Captures<'l, 'c>,
+) -> impl Iterator<Item = Spot<'l>> + Clone {
     let mut finishes = Vec::new();
 
     match game {
@@ -108,12 +112,26 @@ fn hunt<'l, 'c>(game: Game, mut start: Spot<'l>, captures: &mut Captures<'l, 'c>
         }
         Game::Item(id, game) => {
             let item_finishes = hunt(*game, start.clone(), captures);
-            captures.insert(id, item_finishes.iter().map(|finish| Find::new(start.clone(), finish.index)).collect());
+
+            // TODO: Determine how to handle the possibility of multiple matches with id.
+            if captures
+                .insert(
+                    id,
+                    item_finishes
+                        .clone()
+                        .map(|finish| Find::new(start.clone(), finish.index))
+                        .collect(),
+                )
+                .is_some()
+            {
+                panic!("attempted to assign `Find` to `id` that was already assigned");
+            }
+
             finishes.extend(item_finishes);
         }
     }
 
-    finishes
+    finishes.into_iter()
 }
 
 /// Hunts a [`Game`] on a sequence of [`char`]s.
@@ -131,7 +149,7 @@ impl Cur {
 
     /// Returns if `animal` matches the [`Game`] of `self`.
     pub fn is_match(&self, animal: &str) -> bool {
-        hunt(self.game, Spot::from(animal), &mut Captures::new()).iter().any(Spot::is_end)
+        hunt(self.game, Spot::from(animal), &mut Captures::new()).any(|finish| finish.is_end())
     }
 
     /// Returns the first [`Find`] that matches the [`Game`] of `self` starting from each consecutive [`Spot`] of `land`.
@@ -149,7 +167,7 @@ impl Cur {
         let mut captures = Captures::new();
 
         loop {
-            if let Some(finish) = hunt(self.game, start.clone(), &mut captures).first() {
+            if let Some(finish) = hunt(self.game, start.clone(), &mut captures).next() {
                 return Some(Catch::new(Find::new(start, finish.index), captures));
             }
 
@@ -161,8 +179,13 @@ impl Cur {
         None
     }
 
+    /// Returns the first [`Find`] that matches the [`Game`] associated with the `name`.
+    ///
+    /// [`None`] indicates the [`Game`] does not match `land`.
     pub fn grab<'l>(&self, land: &'l str, name: &str) -> Option<Find<'l>> {
-        self.catch(land).and_then(|catch| catch.get(name)).and_then(|finds| finds.into_iter().next())
+        self.catch(land)
+            .and_then(|catch| catch.get(name))
+            .and_then(|finds| finds.into_iter().next())
     }
 }
 
@@ -245,47 +268,61 @@ pub struct Find<'l> {
 
 impl<'l> Find<'l> {
     /// Creates a new `Find`.
-    fn new(spot: Spot<'l>, finish: usize) -> Self {
+    const fn new(spot: Spot<'l>, finish: usize) -> Self {
         Self { spot, finish }
     }
 
-    pub fn start(&self) -> usize {
+    /// Returns the first index of the match with [`Game`].
+    pub const fn start(&self) -> usize {
         self.spot.index
     }
 
-    pub fn finish(&self) -> usize {
+    /// Returns the first index after the match with [`Game`].
+    pub const fn finish(&self) -> usize {
         self.finish
     }
 
+    /// Returns the [`&str`] that matched the [`Game`].
     pub fn as_str(&self) -> &str {
-        self.spot.chars.as_str().get(..self.finish.saturating_sub(self.spot.index)).unwrap()
+        self.spot
+            .chars
+            .as_str()
+            .get(..self.finish.saturating_sub(self.spot.index))
+            .unwrap()
     }
 }
 
-/// Signifies a match of a [`Game`], where all inner [`Game::Item`]s are stored within 
+/// Signifies a match of a [`Game`], where all inner [`Game::Item`]s are stored within
 #[derive(Debug)]
 pub struct Catch<'l, 'c> {
+    /// The [`Find`] over the original [`Game`].
     find: Find<'l>,
+    /// An map that associates names with [`Find`]s
     captures: Captures<'l, 'c>,
 }
 
 impl<'l, 'c> Catch<'l, 'c> {
-    pub fn new(find: Find<'l>, captures: Captures<'l, 'c>) -> Self {
-        Self { find, captures}
+    /// Creates a new `Catch`.
+    const fn new(find: Find<'l>, captures: Captures<'l, 'c>) -> Self {
+        Self { find, captures }
     }
 
-    pub fn start(&self) -> usize {
+    /// Returns the first index of the match with [`Game`].
+    pub const fn start(&self) -> usize {
         self.find.start()
     }
 
-    pub fn finish(&self) -> usize {
+    /// Returns the first index after the match with [`Game`].
+    pub const fn finish(&self) -> usize {
         self.find.finish()
     }
 
+    /// Returns the [`&str`] that matched the [`Game`].
     pub fn as_str(&self) -> &str {
         self.find.as_str()
     }
 
+    /// Returns the list of [`Find`]s identified by `id`.
     pub fn get(&self, id: &str) -> Option<Vec<Find<'l>>> {
         self.captures.get(id).cloned()
     }

@@ -7,7 +7,7 @@ macro_rules! assert_find {
             assert_eq!(find.finish(), $finish);
             assert_eq!(find.as_str(), $s);
         }
-    }
+    };
 }
 
 /// An empty [`Game::Sequence`] shall always find an empty [`Find`].

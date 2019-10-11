@@ -34,7 +34,10 @@ fn single_item() {
 
 #[test]
 fn inner_item() {
-    let cur = Cur::new(Game::Sequence(&[Game::Item("id", &Game::Char('a')), Game::Char('b')]));
+    let cur = Cur::new(Game::Sequence(&[
+        Game::Item("id", &Game::Char('a')),
+        Game::Char('b'),
+    ]));
 
     assert_catch!(cur; "ab"; 0, 2, "ab"; "id"=> 0, 1, "a");
 }

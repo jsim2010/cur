@@ -138,7 +138,9 @@ impl GameExpr {
     /// Assumes that each `GameExpr` of `elements` is not a [`Sequence`].
     fn sequence(mut elements: Vec<Self>) -> Self {
         if elements.len() == 1 {
-            elements.pop().expect("popping element from a `Vec` with a length of 1")
+            elements
+                .pop()
+                .expect("popping element from a `Vec` with a length of 1")
         } else {
             Self::Sequence(elements)
         }
@@ -288,7 +290,10 @@ impl TryFrom<Expr> for GameExpr {
             | Expr::TryBlock(..)
             | Expr::Yield(..)
             | Expr::Verbatim(..)
-            | Expr::__Nonexhaustive => Err(Error::new_spanned(value, "expression cannot be converted into `Game`")),
+            | Expr::__Nonexhaustive => Err(Error::new_spanned(
+                value,
+                "expression cannot be converted into `Game`",
+            )),
         }
     }
 }
@@ -336,7 +341,10 @@ impl TryFrom<ExprBinary> for GameExpr {
             | BinOp::BitAndEq(..)
             | BinOp::BitOrEq(..)
             | BinOp::ShlEq(..)
-            | BinOp::ShrEq(..) => Err(Error::new_spanned(value.op, "invalid binary operation; expected `|` or `+`")),
+            | BinOp::ShrEq(..) => Err(Error::new_spanned(
+                value.op,
+                "invalid binary operation; expected `|` or `+`",
+            )),
         }
     }
 }
