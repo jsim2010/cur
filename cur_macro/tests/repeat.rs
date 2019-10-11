@@ -1,49 +1,65 @@
-use cur::Scent;
-use cur_macro::scent;
+use cur::Game;
+use cur_macro::game;
 
 /// Try.
 #[test]
 fn try_expr() {
-    #[scent]
-    const TRY: Scent = 'a'?;
+    #[game]
+    const TRY: Game = 'a'?;
 
-    assert_eq!(TRY, Scent::Union(&[Scent::Absent, Scent::Atom('a')]));
+    assert_eq!(TRY, Game::Union(&[Game::Sequence(&[]), Game::Char('a')]));
 }
 
 /// Index with usize.
 #[test]
 fn exact() {
-    #[scent]
-    const THREE_REPEATS: Scent = 'a'[3];
+    #[game]
+    const THREE_REPEATS: Game = 'a'[3];
 
     assert_eq!(
         THREE_REPEATS,
-        Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('a'), Scent::Atom('a')])
+        Game::Sequence(&[Game::Char('a'), Game::Char('a'), Game::Char('a')])
     );
+}
+
+#[test]
+fn exactly_one() {
+    #[game]
+    const ONE_REPEAT: Game = 'a'[1];
+
+    assert_eq!(ONE_REPEAT, Game::Char('a'));
+}
+
+#[test]
+fn exactly_zero() {
+    #[game]
+    const ZERO_REPEAT: Game = 'a'[0];
+
+    assert_eq!(ZERO_REPEAT, Game::Sequence(&[]));
 }
 
 /// Index with RangeFull.
 #[test]
 fn zero_or_more() {
-    #[scent]
-    const ZERO_OR_MORE: Scent = 'a'[..];
+    #[game]
+    const ZERO_OR_MORE: Game = 'a'[..];
 
-    assert_eq!(ZERO_OR_MORE, Scent::Repetition(&Scent::Atom('a')));
+    assert_eq!(ZERO_OR_MORE, Game::Repetition(&Game::Char('a')));
 }
 
 /// Index with RangeFrom.
 #[test]
 fn start_or_more() {
-    #[scent]
-    const THREE_OR_MORE: Scent = 'a'[3..];
+    #[game]
+    const THREE_OR_MORE: Game = 'a'[3..];
 
     assert_eq!(
         THREE_OR_MORE,
-        Scent::Sequence(&[
-            Scent::Atom('a'),
-            Scent::Atom('a'),
-            Scent::Atom('a'),
-            Scent::Repetition(&Scent::Atom('a'))
+        Game::Sequence(&[
+            Game::Char('a'),
+            Game::Char('a'),
+            Game::Char('a'),
+            Game::Repetition(&Game::Char('a'))
         ])
     );
 }
@@ -51,15 +67,15 @@ fn start_or_more() {
 /// Index with RangeTo.
 #[test]
 fn less_than_end() {
-    #[scent]
-    const LESS_THAN_FOUR: Scent = 'a'[..4];
+    #[game]
+    const LESS_THAN_FOUR: Game = 'a'[..4];
 
     assert_eq!(
         LESS_THAN_FOUR,
-        Scent::Sequence(&[
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')])
+        Game::Sequence(&[
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')])
         ])
     );
 }
@@ -67,15 +83,15 @@ fn less_than_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn end_or_less() {
-    #[scent]
-    const THREE_OR_LESS: Scent = 'a'[..=3];
+    #[game]
+    const THREE_OR_LESS: Game = 'a'[..=3];
 
     assert_eq!(
         THREE_OR_LESS,
-        Scent::Sequence(&[
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')])
+        Game::Sequence(&[
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')])
         ])
     );
 }
@@ -83,16 +99,16 @@ fn end_or_less() {
 /// Index with Range.
 #[test]
 fn start_to_end() {
-    #[scent]
-    const TWO_TO_FIVE: Scent = 'a'[2..5];
+    #[game]
+    const TWO_TO_FIVE: Game = 'a'[2..5];
 
     assert_eq!(
         TWO_TO_FIVE,
-        Scent::Sequence(&[
-            Scent::Atom('a'),
-            Scent::Atom('a'),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')])
+        Game::Sequence(&[
+            Game::Char('a'),
+            Game::Char('a'),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')])
         ])
     );
 }
@@ -100,16 +116,16 @@ fn start_to_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn start_to_end_inclusive() {
-    #[scent]
-    const TWO_TO_FOUR_INCLUSIVE: Scent = 'a'[2..=4];
+    #[game]
+    const TWO_TO_FOUR_INCLUSIVE: Game = 'a'[2..=4];
 
     assert_eq!(
         TWO_TO_FOUR_INCLUSIVE,
-        Scent::Sequence(&[
-            Scent::Atom('a'),
-            Scent::Atom('a'),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a')])
+        Game::Sequence(&[
+            Game::Char('a'),
+            Game::Char('a'),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a')])
         ])
     );
 }
@@ -117,26 +133,26 @@ fn start_to_end_inclusive() {
 /// BitOr with Try.
 #[test]
 fn try_union() {
-    #[scent]
-    const TRY_UNION: Scent = ('a' | 'b')?;
+    #[game]
+    const TRY_UNION: Game = ('a' | 'b')?;
 
     assert_eq!(
         TRY_UNION,
-        Scent::Union(&[Scent::Absent, Scent::Atom('a'), Scent::Atom('b')])
+        Game::Union(&[Game::Sequence(&[]), Game::Char('a'), Game::Char('b')])
     );
 }
 
 /// BitOr with Index.
 #[test]
 fn repeat_union() {
-    #[scent]
-    const REPEAT_UNION: Scent = ('a' | 'b')[1..3];
+    #[game]
+    const REPEAT_UNION: Game = ('a' | 'b')[1..3];
 
     assert_eq!(
         REPEAT_UNION,
-        Scent::Sequence(&[
-            Scent::Union(&[Scent::Atom('a'), Scent::Atom('b')]),
-            Scent::Union(&[Scent::Absent, Scent::Atom('a'), Scent::Atom('b')])
+        Game::Sequence(&[
+            Game::Union(&[Game::Char('a'), Game::Char('b')]),
+            Game::Union(&[Game::Sequence(&[]), Game::Char('a'), Game::Char('b')])
         ])
     );
 }
@@ -144,14 +160,14 @@ fn repeat_union() {
 /// Add with Try.
 #[test]
 fn try_sequence() {
-    #[scent]
-    const TRY_SEQUENCE: Scent = ('a' + 'b')?;
+    #[game]
+    const TRY_SEQUENCE: Game = ('a' + 'b')?;
 
     assert_eq!(
         TRY_SEQUENCE,
-        Scent::Union(&[
-            Scent::Absent,
-            Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b')]),
+        Game::Union(&[
+            Game::Sequence(&[]),
+            Game::Sequence(&[Game::Char('a'), Game::Char('b')]),
         ])
     );
 }
@@ -159,15 +175,15 @@ fn try_sequence() {
 /// Add with Index.
 #[test]
 fn repeat_sequence() {
-    #[scent]
-    const REPEAT_SEQUENCE: Scent = ('a' + 'b')[1..];
+    #[game]
+    const REPEAT_SEQUENCE: Game = ('a' + 'b')[1..];
 
     assert_eq!(
         REPEAT_SEQUENCE,
-        Scent::Sequence(&[
-            Scent::Atom('a'),
-            Scent::Atom('b'),
-            Scent::Repetition(&Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b')]),)
+        Game::Sequence(&[
+            Game::Char('a'),
+            Game::Char('b'),
+            Game::Repetition(&Game::Sequence(&[Game::Char('a'), Game::Char('b')]),)
         ])
     );
 }

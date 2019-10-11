@@ -1,50 +1,68 @@
-use cur::Scent;
-use cur_macro::scent;
+use cur::Game;
+use cur_macro::game;
 
-/// [`None`] is replaced by [`Scent::Absent`].
+/// [`None`] is replaced by an empty [`Game::Sequence`].
 #[test]
 fn none() {
-    #[scent]
-    const EMPTY: Scent = None;
+    #[game]
+    const EMPTY: Game = None;
 
-    assert_eq!(EMPTY, Scent::Absent);
+    assert_eq!(EMPTY, Game::Sequence(&[]));
 }
 
-/// [`char`] is replaced by [`Scent::Atom`].
+/// [`char`] is replaced by [`Game::Char`].
 #[test]
 fn char() {
-    #[scent]
-    const CHAR: Scent = 'a';
+    #[game]
+    const CHAR: Game = 'a';
 
-    assert_eq!(CHAR, Scent::Atom('a'));
+    assert_eq!(CHAR, Game::Char('a'));
 }
 
-/// [`&str`] is replaced by [`Scent::Sequence`] of [`Scent::Atom`]s.
+/// [`&str`] with a single char is replaced by [`Game::Char`].
+#[test]
+fn single_char_str() {
+    #[game]
+    const SINGLE_CHAR: Game = "a";
+
+    assert_eq!(SINGLE_CHAR, Game::Char('a'));
+}
+
+/// [`&str`] is replaced by [`Game::Sequence`] of [`Game::Char`]s.
 #[test]
 fn string() {
-    #[scent]
-    const STR: Scent = "abc";
+    #[game]
+    const STR: Game = "abc";
 
     assert_eq!(
         STR,
-        Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')])
+        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
     );
 }
 
-/// Parenthesis is replaced by [`Scent`] of the expression inside.
+/// Parenthesis is replaced by [`Game`] of the expression inside.
 #[test]
 fn parenthesis() {
-    #[scent]
-    const PARENTHESIS: Scent = ('a');
+    #[game]
+    const PARENTHESIS: Game = ('a');
 
-    assert_eq!(PARENTHESIS, Scent::Atom('a'));
+    assert_eq!(PARENTHESIS, Game::Char('a'));
 }
 
 /// Range of [`chars`].
 #[test]
 fn range() {
-    #[scent]
-    const RANGE: Scent = 'a'..'z';
+    #[game]
+    const RANGE: Game = 'a'..'z';
 
-    assert_eq!(RANGE, Scent::Range('a', 'z'));
+    assert_eq!(RANGE, Game::Range('a', 'z'));
+}
+
+/// Type ascription is replaced by [`Game::Item`].
+#[test]
+fn type_ascription() {
+    #[game]
+    const ARTICLE: Game = 'a': id;
+
+    assert_eq!(ARTICLE, Game::Item("id", &Game::Char('a')));
 }

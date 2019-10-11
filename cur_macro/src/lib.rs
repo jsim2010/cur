@@ -50,123 +50,152 @@ extern crate proc_macro;
 use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
 use core::convert::{TryFrom, TryInto};
 use proc_macro::TokenStream;
-use proc_macro2::{
-    Delimiter, Group, Literal, Punct, Spacing, Span, TokenStream as TokenStream2, TokenTree,
-};
-use quote::{quote, ToTokens, TokenStreamExt};
+use proc_macro2::TokenStream as TokenStream2;
+use quote::{quote, ToTokens};
 use syn::{
     parse::{Parse, ParseStream, Result as ParseResult},
-    parse_macro_input, Ident, ItemConst,
+    parse_macro_input, Ident, ItemConst, Type,
 };
 use syn::{
-    BinOp, Error, Expr, ExprBinary, ExprIndex, ExprPath, ExprRange, ExprTry, Lit, Path,
+    BinOp, Error, Expr, ExprBinary, ExprIndex, ExprPath, ExprRange, ExprTry, ExprType, Lit, Path,
     RangeLimits, Visibility,
 };
 
-/// Converts `item` into a `cur::Scent`.
+/// Converts `item` into a [`Game`].
 ///
-/// Creating `cur::Scent`s can quickly become complex and error-prone. It is intended that a user
-/// can use this procedural macro to build a `cur::Scent` that is clearly understandable using
-/// valid rust syntax.
+/// Creating [`Game`]s can quickly become complex and error-prone. It is intended that a user
+/// can use this procedural macro to build a [`Game`] using valid rust syntax that is easily understandable.
+///
+/// Additionally, `game` removes any unnecessary complexity in a created [`Game`], such as converting a [`Sequence`] with one element to just that element.
 ///
 /// # Example(s)
 /// ```
-/// use cur::{scent, Scent};
+/// use cur::{game, Game};
 ///
-/// #[scent]
-/// const HELLO_WORLD: Scent = "Hello world!";
+/// #[game]
+/// const HELLO_WORLD: Game = "Hello world!";
 /// ```
 #[proc_macro_attribute]
-pub fn scent(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let ScentInput { vis, ident, scent } = parse_macro_input!(item as ScentInput);
+pub fn game(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let Input { vis, ident, expr } = parse_macro_input!(item as Input);
 
     TokenStream::from(quote! {
-        #vis const #ident: Scent = #scent;
+        #vis const #ident: Game = #expr;
     })
 }
 
-/// Information required to create a const [`Scent`] definition.
-struct ScentInput {
-    /// Visibility of the [`Scent`].
+/// Specifies input used to create a [`Game`] definition.
+struct Input {
+    /// Visibility of the [`Game`].
     vis: Visibility,
-    /// Identifier of the [`Scent`].
+    /// Identifier of the [`Game`].
     ident: Ident,
-    /// Information required to create the [`Scent`] tokens.
-    scent: ScentBuilder,
+    /// Expression of the [`Game`].
+    expr: GameExpr,
 }
 
-impl Parse for ScentInput {
+impl Parse for Input {
     fn parse(input: ParseStream<'_>) -> ParseResult<Self> {
+        // Parses input as an ItemConst and then parses the Expr to a GameExpr.
         input.parse().and_then(|item: ItemConst| {
             Ok(Self {
                 vis: item.vis,
                 ident: item.ident,
-                scent: (*item.expr).try_into()?,
+                expr: (*item.expr).try_into()?,
             })
         })
     }
 }
 
-/// Maps to [`Scent`] definitions.
+/// Maps to [`Game`] expressions.
 ///
-/// Using `ScentBuilder` instead of [`Scent`] removes need for adding [`cur`] as a dependency,
-/// which would be a circular dependency.
+/// Using `GameExpr` instead of [`Game`] because adding [`cur`] as a dependency would be circular.
 #[derive(Clone, Debug)]
-enum ScentBuilder {
-    /// Maps to [`Scent::Absent`].
-    Absent,
-    /// Maps to [`Scent::Atom`].
-    Atom(char),
-    /// Maps to [`Scent::Range`].
+enum GameExpr {
+    /// Maps to [`Game::Char`].
+    Char(char),
+    /// Maps to [`Game::Range`].
     Range(char, char),
-    /// Maps to [`Scent::Union`].
-    Union(Vec<ScentBuilder>),
-    /// Maps to [`Scent::Sequence`].
-    Sequence(Vec<ScentBuilder>),
-    /// Maps to [`Scent::Repetition`].
-    Repetition(Box<ScentBuilder>),
-    /// Maps to the [`Path`] of a [`Scent`]
+    /// Maps to [`Game::Union`].
+    ///
+    /// Each `GameExpr` in the given [`Vec`] should not be a `Union`.
+    Union(Vec<GameExpr>),
+    /// Maps to [`Game::Sequence`].
+    ///
+    /// Each `GameExpr` in the given [`Vec`] should not be a `Sequence`.
+    Sequence(Vec<GameExpr>),
+    /// Maps to [`Game::Repetition`].
+    Repetition(Box<GameExpr>),
+    /// Maps to [`Game::Item`].
+    Item(Box<str>, Box<GameExpr>),
+    /// Maps to the [`Path`] of a [`Game`]
     Path(Path),
 }
 
-impl ScentBuilder {
-    /// Creates a `ScentBuilder` that repeats `self` as specified by `repeater`.
-    fn repeat(self, repeater: &ScentRepeater) -> Self {
-        if repeater.minimum == 0 && repeater.maximum == usize::max_value() {
-            Self::Repetition(Box::new(self))
+impl GameExpr {
+    /// Creates the simplest `GameExpr` that describes a sequence of `elements`.
+    ///
+    /// Assumes that each `GameExpr` of `elements` is not a [`Sequence`].
+    fn sequence(mut elements: Vec<Self>) -> Self {
+        if elements.len() == 1 {
+            elements
+                .pop()
+                .expect("popping element from a `Vec` with a length of 1")
         } else {
-            let mut sequence = Vec::new();
-
-            for _ in 0..repeater.minimum {
-                sequence.extend(self.clone().into_elements());
-            }
-
-            if repeater.maximum == usize::max_value() {
-                sequence.push(Self::Repetition(Box::new(self)));
-            } else {
-                for _ in repeater.minimum..repeater.maximum {
-                    sequence.push(Self::Absent.branch(self.clone()));
-                }
-            }
-
-            Self::Sequence(sequence)
+            Self::Sequence(elements)
         }
     }
 
-    /// Creates a `ScentBuilder` with alternate `branch` if `self` fails.
-    fn branch(self, branch: Self) -> Self {
-        Self::Union(if let Self::Union(mut branches) = self {
-            branches.push(branch);
-            branches
-        } else if let Self::Union(mut branches) = branch {
-            branches.insert(0, self);
-            branches
-        } else {
-            vec![self, branch]
-        })
+    /// Creates an empty [`Sequence`].
+    ///
+    /// Use this instead of `sequence` when it is known that the sequence will be empty.
+    #[allow(clippy::missing_const_for_fn)] // Issue with lint; Vec::new() is not yet stable as a const fn.
+    fn empty() -> Self {
+        Self::Sequence(Vec::new())
     }
 
-    /// Converts `self` into a sequence of `ScentBuilder`s.
+    /// Creates a `GameExpr` that repeats `self` as specified by `repeater`.
+    fn repeat(self, repeater: &GameRepeater) -> Self {
+        let mut elements = Vec::new();
+
+        for _ in 0..repeater.minimum {
+            elements.extend(self.clone().into_elements());
+        }
+
+        if repeater.maximum == usize::max_value() {
+            elements.push(Self::Repetition(Box::new(self)));
+        } else {
+            for _ in repeater.minimum..repeater.maximum {
+                elements.push(self.clone().optional());
+            }
+        }
+
+        Self::sequence(elements)
+    }
+
+    /// Creates a `GameExpr` that can be either empty or `self`.
+    fn optional(self) -> Self {
+        let mut branches = vec![Self::empty()];
+
+        branches.extend(self.into_branches());
+        Self::Union(branches)
+    }
+
+    /// Creates a `GameExpr::Item` from `id` and `self`.
+    fn name(self, id: Box<str>) -> Self {
+        Self::Item(id, Box::new(self))
+    }
+
+    /// Creates a [`Vec`] of all branches from `self`.
+    fn into_branches(self) -> Vec<Self> {
+        if let Self::Union(branches) = self {
+            branches
+        } else {
+            vec![self]
+        }
+    }
+
+    /// Converts `self` into a sequence of `GameExpr`s.
     fn into_elements(self) -> Vec<Self> {
         if let Self::Sequence(elements) = self {
             elements
@@ -174,109 +203,40 @@ impl ScentBuilder {
             vec![self]
         }
     }
-
-    /// Converts `expr` to a [`char`].
-    ///
-    /// [`Err`] indicates `expr` is unable to be converted.
-    fn char_try_from_expr(expr: Expr) -> ParseResult<char> {
-        if let Expr::Lit(literal) = expr {
-            if let Lit::Char(c) = literal.lit {
-                Ok(c.value())
-            } else {
-                Err(Error::new_spanned(literal, "Expected char literal"))
-            }
-        } else {
-            Err(Error::new_spanned(expr, "Expected literal"))
-        }
-    }
-
-    /// Appends "Scent::" to `tokens`.
-    fn append_scent_tokens(tokens: &mut TokenStream2) {
-        tokens.append(Ident::new("Scent", Span::call_site()));
-        tokens.append(Punct::new(':', Spacing::Joint));
-        tokens.append(Punct::new(':', Spacing::Alone));
-    }
 }
 
-impl ToTokens for ScentBuilder {
+impl ToTokens for GameExpr {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         match self {
-            Self::Absent => {
-                Self::append_scent_tokens(tokens);
-                tokens.append(Ident::new("Absent", Span::call_site()));
-            }
-            Self::Atom(c) => {
-                Self::append_scent_tokens(tokens);
-                tokens.append(Ident::new("Atom", Span::call_site()));
-                tokens.append(Group::new(
-                    Delimiter::Parenthesis,
-                    TokenTree::from(Literal::character(*c)).into(),
-                ));
+            Self::Char(c) => {
+                tokens.extend(quote! {
+                    Game::Char(#c)
+                });
             }
             Self::Range(start, end) => {
-                Self::append_scent_tokens(tokens);
-                let mut range_values = TokenStream2::new();
-
-                tokens.append(Ident::new("Range", Span::call_site()));
-
-                range_values.append(Literal::character(*start));
-                range_values.append(Punct::new(',', Spacing::Alone));
-                range_values.append(Literal::character(*end));
-
-                tokens.append(Group::new(Delimiter::Parenthesis, range_values));
+                tokens.extend(quote! {
+                    Game::Range(#start, #end)
+                });
             }
             Self::Sequence(elements) => {
-                Self::append_scent_tokens(tokens);
-                let mut element_list = TokenStream2::new();
-                let mut element_array = TokenStream2::new();
-
-                tokens.append(Ident::new("Sequence", Span::call_site()));
-
-                element_array.append(Punct::new('&', Spacing::Alone));
-
-                if let Some(first_element) = elements.first() {
-                    first_element.to_tokens(&mut element_list);
-                }
-
-                for element in elements.iter().skip(1) {
-                    element_list.append(Punct::new(',', Spacing::Alone));
-                    element.to_tokens(&mut element_list);
-                }
-
-                element_array.append(Group::new(Delimiter::Bracket, element_list));
-                tokens.append(Group::new(Delimiter::Parenthesis, element_array));
+                tokens.extend(quote! {
+                    Game::Sequence(&[#(#elements),*])
+                });
             }
             Self::Union(branches) => {
-                Self::append_scent_tokens(tokens);
-                let mut branch_array = TokenStream2::new();
-                let mut branch_list = TokenStream2::new();
-
-                tokens.append(Ident::new("Union", Span::call_site()));
-
-                branch_array.append(Punct::new('&', Spacing::Alone));
-
-                if let Some(first_branch) = branches.first() {
-                    first_branch.to_tokens(&mut branch_list);
-                }
-
-                for branch in branches.iter().skip(1) {
-                    branch_list.append(Punct::new(',', Spacing::Alone));
-                    branch.to_tokens(&mut branch_list);
-                }
-
-                branch_array.append(Group::new(Delimiter::Bracket, branch_list));
-                tokens.append(Group::new(Delimiter::Parenthesis, branch_array));
+                tokens.extend(quote! {
+                    Game::Union(&[#(#branches),*])
+                });
             }
-            Self::Repetition(scent) => {
-                Self::append_scent_tokens(tokens);
-                let mut repetition_args = TokenStream2::new();
-
-                tokens.append(Ident::new("Repetition", Span::call_site()));
-
-                repetition_args.append(Punct::new('&', Spacing::Alone));
-                scent.to_tokens(&mut repetition_args);
-
-                tokens.append(Group::new(Delimiter::Parenthesis, repetition_args));
+            Self::Repetition(game) => {
+                tokens.extend(quote! {
+                    Game::Repetition(&#game)
+                });
+            }
+            Self::Item(id, game) => {
+                tokens.extend(quote! {
+                    Game::Item(#id, &#game)
+                });
             }
             Self::Path(path) => {
                 path.to_tokens(tokens);
@@ -285,18 +245,19 @@ impl ToTokens for ScentBuilder {
     }
 }
 
-impl TryFrom<Expr> for ScentBuilder {
+impl TryFrom<Expr> for GameExpr {
     type Error = Error;
 
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
         match value {
+            Expr::Binary(binary) => binary.try_into(),
+            Expr::Index(index) => index.try_into(),
             Expr::Path(path) => path.try_into(),
             Expr::Lit(literal) => literal.lit.try_into(),
-            Expr::Binary(binary) => binary.try_into(),
             Expr::Paren(paren) => (*paren.expr).try_into(),
-            Expr::Index(index) => index.try_into(),
             Expr::Try(try_expr) => try_expr.try_into(),
             Expr::Range(range) => range.try_into(),
+            Expr::Type(type_expr) => type_expr.try_into(),
             Expr::Repeat(..)
             | Expr::Unary(..)
             | Expr::Box(..)
@@ -327,15 +288,17 @@ impl TryFrom<Expr> for ScentBuilder {
             | Expr::Group(..)
             | Expr::Async(..)
             | Expr::TryBlock(..)
-            | Expr::Type(..)
             | Expr::Yield(..)
             | Expr::Verbatim(..)
-            | Expr::__Nonexhaustive => Err(Error::new_spanned(value, "Invalid scent expression")),
+            | Expr::__Nonexhaustive => Err(Error::new_spanned(
+                value,
+                "expression cannot be converted into `Game`",
+            )),
         }
     }
 }
 
-impl TryFrom<ExprBinary> for ScentBuilder {
+impl TryFrom<ExprBinary> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprBinary) -> Result<Self, Self::Error> {
@@ -343,11 +306,15 @@ impl TryFrom<ExprBinary> for ScentBuilder {
         let rhs: Self = (*value.right).try_into()?;
 
         match value.op {
-            BinOp::BitOr(..) => Ok(lhs.branch(rhs)),
+            BinOp::BitOr(..) => {
+                let mut branches = lhs.into_branches();
+                branches.append(&mut rhs.into_branches());
+                Ok(Self::Union(branches))
+            }
             BinOp::Add(..) => {
                 let mut elements = lhs.into_elements();
                 elements.append(&mut rhs.into_elements());
-                Ok(Self::Sequence(elements))
+                Ok(Self::sequence(elements))
             }
             BinOp::BitAnd(..)
             | BinOp::Sub(..)
@@ -374,66 +341,99 @@ impl TryFrom<ExprBinary> for ScentBuilder {
             | BinOp::BitAndEq(..)
             | BinOp::BitOrEq(..)
             | BinOp::ShlEq(..)
-            | BinOp::ShrEq(..) => Err(Error::new_spanned(value.op, "Invalid binary operation")),
+            | BinOp::ShrEq(..) => Err(Error::new_spanned(
+                value.op,
+                "invalid binary operation; expected `|` or `+`",
+            )),
         }
     }
 }
 
-impl TryFrom<ExprIndex> for ScentBuilder {
+impl TryFrom<ExprIndex> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprIndex) -> Result<Self, Self::Error> {
-        let repeater = ScentRepeater::try_from(*value.index)?;
+        let repeater = GameRepeater::try_from(*value.index)?;
         (*value.expr)
             .try_into()
-            .map(|scent: Self| scent.repeat(&repeater))
+            .map(|game: Self| game.repeat(&repeater))
     }
 }
 
-impl TryFrom<ExprPath> for ScentBuilder {
+impl TryFrom<ExprPath> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprPath) -> Result<Self, Self::Error> {
         if let Some(ident) = value.path.get_ident() {
             if ident.to_string().as_str() == "None" {
-                return Ok(Self::Absent);
+                return Ok(Self::empty());
             }
         }
 
+        // Assume path is valid.
         Ok(Self::Path(value.path))
     }
 }
 
-impl TryFrom<ExprRange> for ScentBuilder {
+impl TryFrom<ExprRange> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
         Ok(Self::Range(
             value
                 .from
-                .map_or(Ok('\u{0}'), |from| Self::char_try_from_expr(*from))?,
+                .map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?,
             value
                 .to
-                .map_or(Ok('\u{10ffff}'), |to| Self::char_try_from_expr(*to))?,
+                .map_or(Ok('\u{10ffff}'), |to| char_try_from_expr(*to))?,
         ))
     }
 }
 
-impl TryFrom<ExprTry> for ScentBuilder {
+impl TryFrom<ExprTry> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprTry) -> Result<Self, Self::Error> {
-        Self::try_from(*value.expr).map(|scent| Self::Absent.branch(scent))
+        Self::try_from(*value.expr).map(Self::optional)
     }
 }
 
-impl TryFrom<Lit> for ScentBuilder {
+impl TryFrom<ExprType> for GameExpr {
+    type Error = Error;
+
+    fn try_from(value: ExprType) -> Result<Self, Self::Error> {
+        let id = match *value.ty.clone() {
+            Type::Path(t) => t.path.get_ident().map_or(
+                Err(Error::new_spanned(value.ty, "expected single ident")),
+                |ident| Ok(ident.to_string().into_boxed_str()),
+            ),
+            Type::Array(..)
+            | Type::BareFn(..)
+            | Type::Group(..)
+            | Type::ImplTrait(..)
+            | Type::Infer(..)
+            | Type::Macro(..)
+            | Type::Never(..)
+            | Type::Paren(..)
+            | Type::Ptr(..)
+            | Type::Reference(..)
+            | Type::Slice(..)
+            | Type::TraitObject(..)
+            | Type::Tuple(..)
+            | Type::Verbatim(..)
+            | Type::__Nonexhaustive => Err(Error::new_spanned(value.ty, "expected path")),
+        }?;
+        Self::try_from(*value.expr).map(|game| game.name(id))
+    }
+}
+
+impl TryFrom<Lit> for GameExpr {
     type Error = Error;
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
-            Lit::Char(c) => Ok(Self::Atom(c.value())),
-            Lit::Str(s) => Ok(Self::Sequence(s.value().chars().map(Self::Atom).collect())),
+            Lit::Char(c) => Ok(Self::Char(c.value())),
+            Lit::Str(s) => Ok(Self::sequence(s.value().chars().map(Self::Char).collect())),
             Lit::ByteStr(..)
             | Lit::Byte(..)
             | Lit::Int(..)
@@ -441,49 +441,25 @@ impl TryFrom<Lit> for ScentBuilder {
             | Lit::Bool(..)
             | Lit::Verbatim(..) => Err(Error::new_spanned(
                 value,
-                "Expected character or string literal.",
+                "expected character or string literal",
             )),
         }
     }
 }
 
-/// Information regarding the number of times a [`ScentBuilder`] can be repeated.
+/// Signifies the number of times a [`GameExpr`] can be repeated.
 #[derive(Debug)]
-struct ScentRepeater {
+struct GameRepeater {
     /// The smallest number of repeats.
     minimum: usize,
     /// The largest number of repeats.
     ///
-    /// A number <= `minimum` indicates the [`ScentBuilder`] must be repeated exactly
+    /// A number <= `minimum` indicates the [`GameExpr`] must be repeated exactly
     /// `minimum` times.
     maximum: usize,
 }
 
-impl ScentRepeater {
-    /// Converts `lit` to a [`usize`].
-    ///
-    /// [`Err`] indicates `lit` is unable to be converted.
-    fn usize_try_from_lit(lit: &Lit) -> ParseResult<usize> {
-        if let Lit::Int(int) = lit {
-            int.base10_parse::<usize>()
-        } else {
-            Err(Error::new_spanned(lit, "Expected usize literal"))
-        }
-    }
-
-    /// Converts `expr` to a [`usize`].
-    ///
-    /// [`Err`] indicates `expr` is unable to be converted.
-    fn usize_try_from_expr(expr: Expr) -> ParseResult<usize> {
-        if let Expr::Lit(literal) = expr {
-            Self::usize_try_from_lit(&literal.lit)
-        } else {
-            Err(Error::new_spanned(expr, "Expected literal"))
-        }
-    }
-}
-
-impl TryFrom<Expr> for ScentRepeater {
+impl TryFrom<Expr> for GameRepeater {
     type Error = Error;
 
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
@@ -528,12 +504,12 @@ impl TryFrom<Expr> for ScentRepeater {
             | Expr::Type(..)
             | Expr::Yield(..)
             | Expr::Verbatim(..)
-            | Expr::__Nonexhaustive => Err(Error::new_spanned(value, "Expected literal or range")),
+            | Expr::__Nonexhaustive => Err(Error::new_spanned(value, "expected literal or range")),
         }
     }
 }
 
-impl TryFrom<ExprRange> for ScentRepeater {
+impl TryFrom<ExprRange> for GameRepeater {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
@@ -541,9 +517,9 @@ impl TryFrom<ExprRange> for ScentRepeater {
             minimum: value
                 .clone()
                 .from
-                .map_or(Ok(0), |from| Self::usize_try_from_expr(*from))?,
+                .map_or(Ok(0), |from| usize_try_from_expr(*from))?,
             maximum: value.clone().to.map_or(Ok(usize::max_value()), |to| {
-                Self::usize_try_from_expr(*to).map(|max| {
+                usize_try_from_expr(*to).map(|max| {
                     max.saturating_sub(if let RangeLimits::HalfOpen(..) = value.limits {
                         1
                     } else {
@@ -555,13 +531,50 @@ impl TryFrom<ExprRange> for ScentRepeater {
     }
 }
 
-impl TryFrom<Lit> for ScentRepeater {
+impl TryFrom<Lit> for GameRepeater {
     type Error = Error;
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
-        Self::usize_try_from_lit(&value).map(|minimum| Self {
+        usize_try_from_lit(&value).map(|minimum| Self {
             minimum,
             maximum: 0,
         })
+    }
+}
+
+/// Converts `expr` to a [`char`].
+///
+/// [`Err`] indicates `expr` is unable to be converted.
+fn char_try_from_expr(expr: Expr) -> ParseResult<char> {
+    if let Expr::Lit(literal) = expr {
+        if let Lit::Char(c) = literal.lit {
+            Ok(c.value())
+        } else {
+            Err(Error::new_spanned(literal, "Expected char literal"))
+        }
+    } else {
+        Err(Error::new_spanned(expr, "Expected literal"))
+    }
+}
+
+/// Converts `lit` to a [`usize`].
+///
+/// [`Err`] indicates `lit` is unable to be converted.
+fn usize_try_from_lit(lit: &Lit) -> ParseResult<usize> {
+    if let Lit::Int(int) = lit {
+        int.base10_parse::<usize>()
+    } else {
+        Err(Error::new_spanned(lit, "Expected usize literal"))
+    }
+}
+
+/// Converts `expr` to a [`usize`].
+///
+/// [`Err`] indicates `expr` is unable to be converted.
+fn usize_try_from_expr(expr: Expr) -> ParseResult<usize> {
+    if let Expr::Lit(literal) = expr {
+        usize_try_from_lit(&literal.lit)
+    } else {
+        Err(Error::new_spanned(expr, "Expected literal"))
     }
 }

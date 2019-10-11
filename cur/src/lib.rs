@@ -1,4 +1,4 @@
-//! cur - Your hunting companion for regular expressions.
+//! cur - Your unicode regular expression hunting companion.
 #![warn(
     absolute_paths_not_starting_with_crate,
     anonymous_parameters,
@@ -46,193 +46,284 @@
 
 extern crate alloc;
 
-use alloc::{vec, vec::Vec};
+use alloc::{collections::BTreeMap, vec, vec::Vec};
 use core::str::Chars;
-pub use cur_macro::scent;
+pub use cur_macro::game;
 
-/// Detects a [`Scent`] on a sequence of [`char`]s.
+/// Returns [`Iterator`] of all finish [`Spot`]s that match `game` beginning from `start`.
+fn hunt<'l, 'c>(
+    game: Game,
+    mut start: Spot<'l>,
+    captures: &mut Captures<'l, 'c>,
+) -> impl Iterator<Item = Spot<'l>> + Clone {
+    let mut finishes = Vec::new();
+
+    match game {
+        Game::Char(c) => {
+            if start.next() == Some(c) {
+                finishes.push(start);
+            }
+        }
+        Game::Range(begin, end) => {
+            if let Some(c) = start.next() {
+                if (begin..=end).contains(&c) {
+                    finishes.push(start);
+                }
+            }
+        }
+        Game::Union(branches) => {
+            finishes.extend(
+                branches
+                    .iter()
+                    .flat_map(|branch| hunt(*branch, start.clone(), captures)),
+            );
+        }
+        Game::Sequence(elements) => {
+            finishes.push(start);
+
+            for element in elements.iter() {
+                // Reset finishes with each iteration because all elements of a sequence must match.
+                let new_starts: Vec<Spot<'l>> = finishes.drain(..).collect();
+
+                for new_start in new_starts {
+                    finishes.extend(hunt(*element, new_start, captures));
+                }
+            }
+        }
+        Game::Repetition(game) => {
+            let mut new_starts = vec![start.clone()];
+            // A repetition of zero is always a match.
+            finishes.push(start);
+
+            loop {
+                let new_finishes: Vec<Spot<'l>> = new_starts
+                    .drain(..)
+                    .flat_map(|new_start| hunt(*game, new_start, captures))
+                    .collect();
+
+                if new_finishes.is_empty() {
+                    // No match found; reached end of Repetition.
+                    break;
+                } else {
+                    finishes.extend(new_finishes.clone());
+                    new_starts = new_finishes;
+                }
+            }
+        }
+        Game::Item(id, game) => {
+            let item_finishes = hunt(*game, start.clone(), captures);
+
+            // TODO: Determine how to handle the possibility of multiple matches with id.
+            if captures
+                .insert(
+                    id,
+                    item_finishes
+                        .clone()
+                        .map(|finish| Find::new(start.clone(), finish.index))
+                        .collect(),
+                )
+                .is_some()
+            {
+                panic!("attempted to assign `Find` to `id` that was already assigned");
+            }
+
+            finishes.extend(item_finishes);
+        }
+    }
+
+    finishes.into_iter()
+}
+
+/// Hunts a [`Game`] on a sequence of [`char`]s.
 #[derive(Clone, Copy, Debug)]
 pub struct Cur {
-    /// The [`Scent`] to be detected.
-    scent: Scent,
+    /// The [`Game`] to be hunted.
+    game: Game,
 }
 
 impl Cur {
-    /// Creates a [`Cur`] with `scent`.
-    pub const fn with_scent(scent: Scent) -> Self {
-        Self { scent }
+    /// Creates a [`Cur`] that will hunt for `game`.
+    pub const fn new(game: Game) -> Self {
+        Self { game }
     }
 
-    /// Returns if `self` is able to detect its [`Scent`] over the entirety of `area`.
-    pub fn indicate(&self, area: &str) -> bool {
-        for tracks in self.scent.follow_tracks(Tracks::new(area.chars())) {
-            if tracks.is_end() {
-                return true;
-            }
-        }
-
-        false
+    /// Returns if `animal` matches the [`Game`] of `self`.
+    pub fn is_match(&self, animal: &str) -> bool {
+        hunt(self.game, Spot::from(animal), &mut Captures::new()).any(|finish| finish.is_end())
     }
 
-    /// Returns the first [`Find`] from `self` attempting to detect its [`Scent`] starting from each consecutive index of `env`.
+    /// Returns the first [`Find`] that matches the [`Game`] of `self` starting from each consecutive [`Spot`] of `land`.
     ///
-    /// [`None`] indicates the [`Scent`] cannot be detected starting from any index in `env`.
-    pub fn point(&self, env: &str) -> Option<Find> {
-        let mut tracks = Tracks::new(env.chars());
+    /// [`None`] indicates the [`Game`] cannot be detected starting from any index in `land`.
+    pub fn find<'l>(&self, land: &'l str) -> Option<Find<'l>> {
+        self.catch(land).map(|catch| catch.find)
+    }
+
+    /// Returns the first [`Catch`] that matches the [`Game`] of `self` starting from each consecutive [`Spot`] of `land`.
+    ///
+    /// [`None`] indicates the [`Game`] does not match starting from any index in `land`.
+    pub fn catch<'l, 'c>(&self, land: &'l str) -> Option<Catch<'l, 'c>> {
+        let mut start = Spot::from(land);
+        let mut captures = Captures::new();
 
         loop {
-            if let Some(end_tracks) = self.scent.follow_tracks(tracks.clone()).first() {
-                return Some(Find::new(tracks.index, end_tracks.index));
+            if let Some(finish) = hunt(self.game, start.clone(), &mut captures).next() {
+                return Some(Catch::new(Find::new(start, finish.index), captures));
             }
 
-            if let Some(c) = tracks.next() {
-                tracks.step(c);
-            } else {
+            if start.next().is_none() {
                 break;
             }
         }
 
         None
     }
-}
 
-/// Signifies a pattern that is detectable on a sequence of [`char`]s.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Scent {
-    /// Detectable on an empty sequence.
-    Absent,
-    /// Detectable on a single [`char`] equal to the given [`char`].
-    Atom(char),
-    /// Detectable on a single [`char`] equal to or in between the given [`char`]s.
-    Range(char, char),
-    /// Detectable when any of the given [`Scent`]s is detectable.
+    /// Returns the first [`Find`] that matches the [`Game`] associated with the `name`.
     ///
-    /// Detections are attempted according to the order of the given [`Scent`]s.
-    Union(&'static [Scent]),
-    /// Detectable when each of the given [`Scent`]s is detectable in order.
-    Sequence(&'static [Scent]),
-    /// Detectable when any number of repetititons of the given [`Scent`] is detected.
-    ///
-    /// Detections are attempted starting with 0 repetitions and incrementing as high as
-    /// possible.
-    Repetition(&'static Scent),
-}
-
-impl Scent {
-    /// Returns the [`Tracks`]s of successful attempts to detect `self` along `tracks`.
-    fn follow_tracks<'a>(&self, mut tracks: Tracks<'a>) -> Vec<Tracks<'a>> {
-        let mut new_tracks = Vec::new();
-
-        match self {
-            Self::Absent => new_tracks.push(tracks),
-            Self::Atom(c) => {
-                if tracks.next() == Some(*c) {
-                    tracks.step(*c);
-                    new_tracks.push(tracks);
-                }
-            }
-            Self::Range(start, end) => {
-                if let Some(c) = tracks.next() {
-                    if (start..=end).contains(&&c) {
-                        tracks.step(c);
-                        new_tracks.push(tracks);
-                    }
-                }
-            }
-            Self::Union(branches) => {
-                new_tracks.extend(
-                    branches
-                        .iter()
-                        .flat_map(|branch| branch.follow_tracks(tracks.clone())),
-                );
-            }
-            Self::Sequence(elements) => {
-                new_tracks.push(tracks);
-
-                for element in elements.iter() {
-                    if new_tracks.is_empty() {
-                        break;
-                    } else {
-                        let current_tracks = new_tracks.clone();
-                        new_tracks.clear();
-
-                        for current_track in current_tracks {
-                            new_tracks.extend(element.follow_tracks(current_track));
-                        }
-                    }
-                }
-            }
-            Self::Repetition(scent) => {
-                let mut current_tracks = vec![tracks.clone()];
-                new_tracks.push(tracks);
-
-                loop {
-                    let mut next_tracks = Vec::new();
-
-                    for current_track in current_tracks {
-                        next_tracks.extend(scent.follow_tracks(current_track));
-                    }
-
-                    if next_tracks.is_empty() {
-                        break;
-                    } else {
-                        current_tracks = next_tracks.clone();
-                        new_tracks.extend(next_tracks);
-                    }
-                }
-            }
-        }
-
-        new_tracks
+    /// [`None`] indicates the [`Game`] does not match `land`.
+    pub fn grab<'l>(&self, land: &'l str, name: &str) -> Option<Find<'l>> {
+        self.catch(land)
+            .and_then(|catch| catch.get(name))
+            .and_then(|finds| finds.into_iter().next())
     }
+}
+
+/// Maps a [`Vec`] of [`Find`]s to an identifier.
+pub type Captures<'l, 'c> = BTreeMap<&'c str, Vec<Find<'l>>>;
+
+/// Signifies a desired pattern of [`char`]s.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Game {
+    /// Matches a single [`char`] equal to the one given.
+    Char(char),
+    /// Matches a single [`char`] equal to or in between the given [`char`]s.
+    Range(char, char),
+    /// Matches any of the given [`Game`]s.
+    ///
+    /// Match attempts are executed in the order of the given [`Game`]s.
+    Union(&'static [Game]),
+    /// Matches each of the given [`Game`]s in order.
+    ///
+    /// An empty slice matches an empty sequence of [`char`]s.
+    Sequence(&'static [Game]),
+    /// Matches any number of repetitions of the given [`Game`].
+    ///
+    /// Match attempts are executed starting with 0 repetitions (an empty slice) and incrementing as high as possible.
+    Repetition(&'static Game),
+    /// Matches the given [`Game`].
+    ///
+    /// If a [`Game`] containing the [`Item`] is captured, a [`Find`] representing the captured [`Game`] is associated with the given [`&str`].
+    Item(&'static str, &'static Game),
 }
 
 /// Iterates over [`char`]s while tracking how far it has traveled.
-#[derive(Clone)]
-struct Tracks<'a> {
-    /// An [`Iterator`] over the remaining chars to be detected.
-    chars: Chars<'a>,
-    /// The index, in bytes (not chars), that has already been followed.
+#[derive(Clone, Debug)]
+pub struct Spot<'l> {
+    /// An [`Iterator`] over the remaining chars.
+    chars: Chars<'l>,
+    /// The index, in bytes (not chars), that has already been traveled.
     index: usize,
 }
 
-impl<'a> Tracks<'a> {
-    /// Creates a new `Tracks` starting at the beginning of `chars`;
-    const fn new(chars: Chars<'a>) -> Self {
-        Self { chars, index: 0 }
-    }
-
+impl<'l> Spot<'l> {
     /// Returns if `self` has no more chars.
     fn is_end(&self) -> bool {
         self.chars.clone().next().is_none()
     }
+}
 
-    /// Increments index of `self` by the number of bytes occupied by 'c'.
-    fn step(&mut self, c: char) {
-        self.index += c.len_utf8();
+impl<'l> From<&'l str> for Spot<'l> {
+    fn from(value: &'l str) -> Self {
+        Spot {
+            chars: value.chars(),
+            index: 0,
+        }
     }
 }
 
-impl<'a> Iterator for Tracks<'a> {
+impl<'l> Iterator for Spot<'l> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.chars.next()
+        let item = self.chars.next();
+
+        // Update self.index.
+        if let Some(c) = item {
+            self.index += c.len_utf8();
+        }
+
+        item
     }
 }
 
-/// Signifies the location of a detection.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Find {
-    /// The index of the start of the detection.
-    start: usize,
-    /// The index of the end of the detection.
-    end: usize,
+/// Signifies a match of a [`Game`].
+#[derive(Clone, Debug)]
+pub struct Find<'l> {
+    /// The [`Spot`] where the `Find` starts.
+    spot: Spot<'l>,
+    /// The index, in bytes, of the finish of the match.
+    finish: usize,
 }
 
-impl Find {
-    /// Creates a [`Find`].
-    pub const fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
+impl<'l> Find<'l> {
+    /// Creates a new `Find`.
+    const fn new(spot: Spot<'l>, finish: usize) -> Self {
+        Self { spot, finish }
+    }
+
+    /// Returns the first index of the match with [`Game`].
+    pub const fn start(&self) -> usize {
+        self.spot.index
+    }
+
+    /// Returns the first index after the match with [`Game`].
+    pub const fn finish(&self) -> usize {
+        self.finish
+    }
+
+    /// Returns the [`&str`] that matched the [`Game`].
+    pub fn as_str(&self) -> &str {
+        self.spot
+            .chars
+            .as_str()
+            .get(..self.finish.saturating_sub(self.spot.index))
+            .unwrap()
+    }
+}
+
+/// Signifies a match of a [`Game`], where all inner [`Game::Item`]s are stored within
+#[derive(Debug)]
+pub struct Catch<'l, 'c> {
+    /// The [`Find`] over the original [`Game`].
+    find: Find<'l>,
+    /// An map that associates names with [`Find`]s
+    captures: Captures<'l, 'c>,
+}
+
+impl<'l, 'c> Catch<'l, 'c> {
+    /// Creates a new `Catch`.
+    const fn new(find: Find<'l>, captures: Captures<'l, 'c>) -> Self {
+        Self { find, captures }
+    }
+
+    /// Returns the first index of the match with [`Game`].
+    pub const fn start(&self) -> usize {
+        self.find.start()
+    }
+
+    /// Returns the first index after the match with [`Game`].
+    pub const fn finish(&self) -> usize {
+        self.find.finish()
+    }
+
+    /// Returns the [`&str`] that matched the [`Game`].
+    pub fn as_str(&self) -> &str {
+        self.find.as_str()
+    }
+
+    /// Returns the list of [`Find`]s identified by `id`.
+    pub fn get(&self, id: &str) -> Option<Vec<Find<'l>>> {
+        self.captures.get(id).cloned()
     }
 }
