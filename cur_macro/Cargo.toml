@@ -18,7 +18,7 @@ quote = "1.0.0"
 syn = { version = "1.0.0", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
-cur = {path="../cur"} #"0.1.0"
+cur = { path = "../cur" }
 
 [lib]
 proc-macro = true

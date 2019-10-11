@@ -1,47 +1,47 @@
-use cur::Scent;
-use cur_macro::scent;
+use cur::Game;
+use cur_macro::game;
 
-/// BitOr is replaced by [`Scent::Union`].
+/// BitOr is replaced by [`Game::Union`].
 #[test]
 fn union() {
-    #[scent]
-    const UNION: Scent = 'a' | 'b';
+    #[game]
+    const UNION: Game = 'a' | 'b';
 
-    assert_eq!(UNION, Scent::Union(&[Scent::Atom('a'), Scent::Atom('b')]));
+    assert_eq!(UNION, Game::Union(&[Game::Char('a'), Game::Char('b')]));
 }
 
-/// Multiple BitOrs are replaced by a single [`Scent::Union`].
+/// Multiple BitOrs are replaced by a single [`Game::Union`].
 #[test]
 fn multiple_union() {
-    #[scent]
-    const MULTIPLE_UNION: Scent = 'a' | 'b' | 'c';
+    #[game]
+    const MULTIPLE_UNION: Game = 'a' | 'b' | 'c';
 
     assert_eq!(
         MULTIPLE_UNION,
-        Scent::Union(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')])
+        Game::Union(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
     );
 }
 
-/// Add is replaced by [`Scent::Sequence`].
+/// Add is replaced by [`Game::Sequence`].
 #[test]
 fn sequence() {
-    #[scent]
-    const SEQUENCE: Scent = 'a' + 'b';
+    #[game]
+    const SEQUENCE: Game = 'a' + 'b';
 
     assert_eq!(
         SEQUENCE,
-        Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b')])
+        Game::Sequence(&[Game::Char('a'), Game::Char('b')])
     );
 }
 
-/// Multiple Adds is replaced by a single [`Scent::Sequence`].
+/// Multiple Adds is replaced by a single [`Game::Sequence`].
 #[test]
 fn multiple_sequence() {
-    #[scent]
-    const MULTIPLE_SEQUENCE: Scent = 'a' + 'b' + 'c';
+    #[game]
+    const MULTIPLE_SEQUENCE: Game = 'a' + 'b' + 'c';
 
     assert_eq!(
         MULTIPLE_SEQUENCE,
-        Scent::Sequence(&[Scent::Atom('a'), Scent::Atom('b'), Scent::Atom('c')])
+        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
     );
 }
