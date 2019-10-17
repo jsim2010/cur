@@ -1,4 +1,4 @@
-use cur::Game;
+use cur::{Game, Scent};
 use cur_macro::game;
 
 #[game]
@@ -17,7 +17,7 @@ fn copy() {
     #[game]
     const COPY: Game = DIGIT;
 
-    assert_eq!(COPY, Game::Range('0', '9'));
+    assert_eq!(COPY, Game::Single(Scent::Range('0', '9')));
 }
 
 /// A Union.
@@ -28,7 +28,7 @@ fn union() {
 
     assert_eq!(
         DIGIT_OR_A,
-        Game::Union(&[Game::Char('a'), Game::Range('0', '9')])
+        Game::Union(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Range('0', '9'))])
     );
 }
 
@@ -40,7 +40,7 @@ fn sequence() {
 
     assert_eq!(
         DIGIT_AND_A,
-        Game::Sequence(&[Game::Range('0', '9'), Game::Char('a')])
+        Game::Sequence(&[Game::Single(Scent::Range('0', '9')), Game::Single(Scent::Char('a'))])
     );
 }
 
@@ -52,7 +52,7 @@ fn option() {
 
     assert_eq!(
         OPTIONAL_DIGIT,
-        Game::Union(&[Game::Sequence(&[]), Game::Range('0', '9')])
+        Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Range('0', '9'))])
     );
 }
 
@@ -64,7 +64,7 @@ fn repetition() {
 
     assert_eq!(
         ZERO_OR_MORE_DIGITS,
-        Game::Repetition(&Game::Range('0', '9'))
+        Game::Repetition(&Game::Single(Scent::Range('0', '9')))
     );
 }
 
@@ -76,6 +76,6 @@ fn path() {
 
     assert_eq!(
         ALPHANUM,
-        Game::Union(&[Game::Range('0', '9'), Game::Range('a', 'z')])
+        Game::Union(&[Game::Single(Scent::Range('0', '9')), Game::Single(Scent::Range('a', 'z'))])
     );
 }

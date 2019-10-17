@@ -70,7 +70,7 @@ use syn::{
 ///
 /// # Example(s)
 /// ```
-/// use cur::{game, Game};
+/// use cur::{game, Game, Scent};
 ///
 /// #[game]
 /// const HELLO_WORLD: Game = "Hello world!";
@@ -107,15 +107,39 @@ impl Parse for Input {
     }
 }
 
+/// Maps to [`Scent`] expressions.
+#[derive(Clone, Debug)]
+enum ScentExpr {
+    /// Maps to [`Scent::Char`].
+    Char(char),
+    /// Maps to [`Scent::Range`].
+    Range(char, char),
+}
+
+impl ToTokens for ScentExpr {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        match self {
+            Self::Char(c) => {
+                tokens.extend(quote! {
+                    Scent::Char(#c)
+                });
+            }
+            Self::Range(start, end) => {
+                tokens.extend(quote! {
+                    Scent::Range(#start, #end)
+                });
+            }
+        }
+    }
+}
+
 /// Maps to [`Game`] expressions.
 ///
 /// Using `GameExpr` instead of [`Game`] because adding [`cur`] as a dependency would be circular.
 #[derive(Clone, Debug)]
 enum GameExpr {
-    /// Maps to [`Game::Char`].
-    Char(char),
-    /// Maps to [`Game::Range`].
-    Range(char, char),
+    /// Maps to [`Game::Single`].
+    Single(ScentExpr),
     /// Maps to [`Game::Union`].
     ///
     /// Each `GameExpr` in the given [`Vec`] should not be a `Union`.
@@ -208,14 +232,9 @@ impl GameExpr {
 impl ToTokens for GameExpr {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         match self {
-            Self::Char(c) => {
+            Self::Single(scent) => {
                 tokens.extend(quote! {
-                    Game::Char(#c)
-                });
-            }
-            Self::Range(start, end) => {
-                tokens.extend(quote! {
-                    Game::Range(#start, #end)
+                    Game::Single(#scent)
                 });
             }
             Self::Sequence(elements) => {
@@ -379,14 +398,14 @@ impl TryFrom<ExprRange> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
-        Ok(Self::Range(
+        Ok(Self::Single(ScentExpr::Range(
             value
                 .from
                 .map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?,
             value
                 .to
                 .map_or(Ok('\u{10ffff}'), |to| char_try_from_expr(*to))?,
-        ))
+        )))
     }
 }
 
@@ -432,8 +451,8 @@ impl TryFrom<Lit> for GameExpr {
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
-            Lit::Char(c) => Ok(Self::Char(c.value())),
-            Lit::Str(s) => Ok(Self::sequence(s.value().chars().map(Self::Char).collect())),
+            Lit::Char(c) => Ok(Self::Single(ScentExpr::Char(c.value()))),
+            Lit::Str(s) => Ok(Self::sequence(s.value().chars().map(|c| Self::Single(ScentExpr::Char(c))).collect())),
             Lit::ByteStr(..)
             | Lit::Byte(..)
             | Lit::Int(..)

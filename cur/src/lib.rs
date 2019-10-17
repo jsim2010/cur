@@ -59,14 +59,9 @@ fn hunt<'l, 'c>(
     let mut finishes = Vec::new();
 
     match game {
-        Game::Char(c) => {
-            if start.next() == Some(c) {
-                finishes.push(start);
-            }
-        }
-        Game::Range(begin, end) => {
+        Game::Single(scent) => {
             if let Some(c) = start.next() {
-                if (begin..=end).contains(&c) {
+                if scent.is_match(c) {
                     finishes.push(start);
                 }
             }
@@ -195,10 +190,8 @@ pub type Captures<'l, 'c> = BTreeMap<&'c str, Vec<Find<'l>>>;
 /// Signifies a desired pattern of [`char`]s.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Game {
-    /// Matches a single [`char`] equal to the one given.
-    Char(char),
-    /// Matches a single [`char`] equal to or in between the given [`char`]s.
-    Range(char, char),
+    /// Matches a single [`char`] as described by the given [`Scent`].
+    Single(Scent),
     /// Matches any of the given [`Game`]s.
     ///
     /// Match attempts are executed in the order of the given [`Game`]s.
@@ -215,6 +208,25 @@ pub enum Game {
     ///
     /// If a [`Game`] containing the [`Item`] is captured, a [`Find`] representing the captured [`Game`] is associated with the given [`&str`].
     Item(&'static str, &'static Game),
+}
+
+/// Signifies a desired [`char`].
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Scent {
+    /// Matches a single [`char`] equal to the one given.
+    Char(char),
+    /// Matches a single [`char`] equal to or in between the given [`char`]s.
+    Range(char, char),
+}
+
+impl Scent {
+    /// Returns if `self` matches `ch`.
+    fn is_match(&self, ch: char) -> bool {
+        match *self {
+            Self::Char(c) => c == ch,
+            Self::Range(begin, end) => (begin..=end).contains(&ch),
+        }
+    }
 }
 
 /// Iterates over [`char`]s while tracking how far it has traveled.

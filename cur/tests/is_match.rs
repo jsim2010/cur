@@ -1,4 +1,4 @@
-use cur::{Cur, Game};
+use cur::{Cur, Game, Scent};
 
 macro_rules! assert_passes {
     ($cur:ident; $( $x:expr ),+) => {
@@ -12,31 +12,31 @@ macro_rules! assert_fails {
     }
 }
 
-/// [`Game::Char`] shall match a single matching [`char`].
+/// [`Scent::Char`] shall match a single matching [`char`].
 #[test]
 fn char() {
-    let cur = Cur::new(Game::Char('a'));
+    let cur = Cur::new(Game::Single(Scent::Char('a')));
 
     assert_passes!(cur; "a");
     assert_fails!(cur; "", "b", "ab");
 }
 
-/// [`Game::Range`] shall match a single [`char`] that is inclusively within the given range.
+/// [`Scent::Range`] shall match a single [`char`] that is inclusively within the given range.
 #[test]
 fn range() {
-    let cur = Cur::new(Game::Range('b', 'd'));
+    let cur = Cur::new(Game::Single(Scent::Range('b', 'd')));
 
     assert_passes!(cur; "b", "c", "d");
     assert_fails!(cur; "", "a", "e");
 }
 
-/// [`Game::Union`] of [`Game::Char`]s shall match a single [`char`] that is one of the given [`char`]s.
+/// [`Game::Union`] of [`Scent::Char`]s shall match a single [`char`] that is one of the given [`char`]s.
 #[test]
 fn union_of_chars() {
     let cur = Cur::new(Game::Union(&[
-        Game::Char('a'),
-        Game::Char('b'),
-        Game::Char('c'),
+        Game::Single(Scent::Char('a')),
+        Game::Single(Scent::Char('b')),
+        Game::Single(Scent::Char('c')),
     ]));
 
     assert_passes!(cur; "a", "b", "c");
@@ -52,36 +52,36 @@ fn empty_sequence() {
     assert_fails!(cur; "a");
 }
 
-/// [`Game::Sequence`] of [`Game::Char`]s shall indicate a string with matching [`char`]s in matching order.
+/// [`Game::Sequence`] of [`Scent::Char`]s shall indicate a string with matching [`char`]s in matching order.
 #[test]
 fn sequence_of_chars() {
     let cur = Cur::new(Game::Sequence(&[
-        Game::Char('a'),
-        Game::Char('b'),
-        Game::Char('c'),
+        Game::Single(Scent::Char('a')),
+        Game::Single(Scent::Char('b')),
+        Game::Single(Scent::Char('c')),
     ]));
 
     assert_passes!(cur; "abc");
     assert_fails!(cur; "", "a", "ab", "aaa", "abcd", "dabc");
 }
 
-/// [`Game::Union`] of [`Game`]s where at least 1 [`Game`] is not [`Game::Char`] shall match a [`&str`] equal to at least 1 of the [`Game`]s.
+/// [`Game::Union`] of [`Game`]s where at least 1 [`Game`] is not [`Scent::Char`] shall match a [`&str`] equal to at least 1 of the [`Game`]s.
 #[test]
 fn union_sequences() {
     let cur = Cur::new(Game::Union(&[
-        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')]),
-        Game::Sequence(&[Game::Char('d'), Game::Char('e')]),
-        Game::Char('f'),
+        Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b')), Game::Single(Scent::Char('c'))]),
+        Game::Sequence(&[Game::Single(Scent::Char('d')), Game::Single(Scent::Char('e'))]),
+        Game::Single(Scent::Char('f')),
     ]));
 
     assert_passes!(cur; "abc", "de", "f");
     assert_fails!(cur; "", "ab", "d", "fd", "df");
 }
 
-/// [`Game::Repetition`] of a [`Game::Char`] shall match any repetition of the given [`char`].
+/// [`Game::Repetition`] of a [`Scent::Char`] shall match any repetition of the given [`char`].
 #[test]
 fn repetition() {
-    let cur = Cur::new(Game::Repetition(&Game::Char('a')));
+    let cur = Cur::new(Game::Repetition(&Game::Single(Scent::Char('a'))));
 
     assert_passes!(cur; "", "a", "aa", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     assert_fails!(cur; "b", "ba", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaabaaaaaaaaaaaaaaaaaaaaaaaa");
@@ -91,8 +91,8 @@ fn repetition() {
 #[test]
 fn union_with_repetition() {
     let cur = Cur::new(Game::Union(&[
-        Game::Repetition(&Game::Char('a')),
-        Game::Char('b'),
+        Game::Repetition(&Game::Single(Scent::Char('a'))),
+        Game::Single(Scent::Char('b')),
     ]));
 
     assert_passes!(cur; "", "a", "aa", "b");
@@ -103,8 +103,8 @@ fn union_with_repetition() {
 #[test]
 fn sequence_any_repetition_and_repeat() {
     let cur = Cur::new(Game::Sequence(&[
-        Game::Repetition(&Game::Char('a')),
-        Game::Char('a'),
+        Game::Repetition(&Game::Single(Scent::Char('a'))),
+        Game::Single(Scent::Char('a')),
     ]));
 
     assert_passes!(cur; "a", "aa", "aaa");
