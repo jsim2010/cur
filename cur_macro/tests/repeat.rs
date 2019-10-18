@@ -7,7 +7,10 @@ fn try_expr() {
     #[game]
     const TRY: Game = 'a'?;
 
-    assert_eq!(TRY, Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]));
+    assert_eq!(
+        TRY,
+        Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+    );
 }
 
 /// Index with usize.
@@ -18,7 +21,11 @@ fn exact() {
 
     assert_eq!(
         THREE_REPEATS,
-        Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('a')), Game::Single(Scent::Char('a'))])
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('a'))
+        ])
     );
 }
 
@@ -44,7 +51,10 @@ fn zero_or_more() {
     #[game]
     const ZERO_OR_MORE: Game = 'a'[..];
 
-    assert_eq!(ZERO_OR_MORE, Game::Repetition(&Game::Single(Scent::Char('a'))));
+    assert_eq!(
+        ZERO_OR_MORE,
+        Game::Repetition(&Game::Single(Scent::Char('a')))
+    );
 }
 
 /// Index with RangeFrom.
@@ -138,7 +148,11 @@ fn try_union() {
 
     assert_eq!(
         TRY_UNION,
-        Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b'))])
+        Game::Union(&[
+            Game::Sequence(&[]),
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b'))
+        ])
     );
 }
 
@@ -151,8 +165,15 @@ fn repeat_union() {
     assert_eq!(
         REPEAT_UNION,
         Game::Sequence(&[
-            Game::Union(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b'))])
+            Game::Union(&[
+                Game::Single(Scent::Char('a')),
+                Game::Single(Scent::Char('b'))
+            ]),
+            Game::Union(&[
+                Game::Sequence(&[]),
+                Game::Single(Scent::Char('a')),
+                Game::Single(Scent::Char('b'))
+            ])
         ])
     );
 }
@@ -167,7 +188,10 @@ fn try_sequence() {
         TRY_SEQUENCE,
         Game::Union(&[
             Game::Sequence(&[]),
-            Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b'))]),
+            Game::Sequence(&[
+                Game::Single(Scent::Char('a')),
+                Game::Single(Scent::Char('b'))
+            ]),
         ])
     );
 }
@@ -183,7 +207,10 @@ fn repeat_sequence() {
         Game::Sequence(&[
             Game::Single(Scent::Char('a')),
             Game::Single(Scent::Char('b')),
-            Game::Repetition(&Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b'))]),)
+            Game::Repetition(&Game::Sequence(&[
+                Game::Single(Scent::Char('a')),
+                Game::Single(Scent::Char('b'))
+            ]),)
         ])
     );
 }

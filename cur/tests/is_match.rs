@@ -69,8 +69,15 @@ fn sequence_of_chars() {
 #[test]
 fn union_sequences() {
     let cur = Cur::new(Game::Union(&[
-        Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b')), Game::Single(Scent::Char('c'))]),
-        Game::Sequence(&[Game::Single(Scent::Char('d')), Game::Single(Scent::Char('e'))]),
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c')),
+        ]),
+        Game::Sequence(&[
+            Game::Single(Scent::Char('d')),
+            Game::Single(Scent::Char('e')),
+        ]),
         Game::Single(Scent::Char('f')),
     ]));
 

@@ -28,7 +28,10 @@ fn union() {
 
     assert_eq!(
         DIGIT_OR_A,
-        Game::Union(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Range('0', '9'))])
+        Game::Union(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Range('0', '9'))
+        ])
     );
 }
 
@@ -40,7 +43,10 @@ fn sequence() {
 
     assert_eq!(
         DIGIT_AND_A,
-        Game::Sequence(&[Game::Single(Scent::Range('0', '9')), Game::Single(Scent::Char('a'))])
+        Game::Sequence(&[
+            Game::Single(Scent::Range('0', '9')),
+            Game::Single(Scent::Char('a'))
+        ])
     );
 }
 
@@ -76,6 +82,9 @@ fn path() {
 
     assert_eq!(
         ALPHANUM,
-        Game::Union(&[Game::Single(Scent::Range('0', '9')), Game::Single(Scent::Range('a', 'z'))])
+        Game::Union(&[
+            Game::Single(Scent::Range('0', '9')),
+            Game::Single(Scent::Range('a', 'z'))
+        ])
     );
 }

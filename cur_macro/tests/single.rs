@@ -36,7 +36,11 @@ fn string() {
 
     assert_eq!(
         STR,
-        Game::Sequence(&[Game::Single(Scent::Char('a')), Game::Single(Scent::Char('b')), Game::Single(Scent::Char('c'))])
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c'))
+        ])
     );
 }
 
