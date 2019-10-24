@@ -63,14 +63,13 @@ use syn::{
 
 /// Converts `item` into a [`Game`].
 ///
-/// Creating [`Game`]s can quickly become complex and error-prone. It is intended that a user
-/// can use this procedural macro to build a [`Game`] using valid rust syntax that is easily understandable.
-///
-/// Additionally, `game` removes any unnecessary complexity in a created [`Game`], such as converting a [`Sequence`] with one element to just that element.
+/// Creating [`Game`]s can quickly become complex and error-prone. It is intended that a user can
+/// use this procedural macro to build a [`Game`] using valid rust syntax that is easily
+/// understandable.
 ///
 /// # Example(s)
 /// ```
-/// use cur::{game, Game};
+/// use cur::{game, Game, Scent};
 ///
 /// #[game]
 /// const HELLO_WORLD: Game = "Hello world!";
@@ -96,7 +95,7 @@ struct Input {
 
 impl Parse for Input {
     fn parse(input: ParseStream<'_>) -> ParseResult<Self> {
-        // Parses input as an ItemConst and then parses the Expr to a GameExpr.
+        // Parse input as an ItemConst and then parse the Expr of the ItemConst to a GameExpr.
         input.parse().and_then(|item: ItemConst| {
             Ok(Self {
                 vis: item.vis,
@@ -108,140 +107,110 @@ impl Parse for Input {
 }
 
 /// Maps to [`Game`] expressions.
-///
-/// Using `GameExpr` instead of [`Game`] because adding [`cur`] as a dependency would be circular.
 #[derive(Clone, Debug)]
 enum GameExpr {
-    /// Maps to [`Game::Char`].
-    Char(char),
-    /// Maps to [`Game::Range`].
-    Range(char, char),
-    /// Maps to [`Game::Union`].
-    ///
-    /// Each `GameExpr` in the given [`Vec`] should not be a `Union`.
-    Union(Vec<GameExpr>),
     /// Maps to [`Game::Sequence`].
     ///
-    /// Each `GameExpr` in the given [`Vec`] should not be a `Sequence`.
-    Sequence(Vec<GameExpr>),
-    /// Maps to [`Game::Repetition`].
-    Repetition(Box<GameExpr>),
-    /// Maps to [`Game::Item`].
-    Item(Box<str>, Box<GameExpr>),
-    /// Maps to the [`Path`] of a [`Game`]
-    Path(Path),
+    /// Guarantees that each element in the sequence is not a `Sequence`.
+    Sequence(Concatenation),
+    /// Maps to [`Game::Union`].
+    ///
+    /// Guarantees that each element in the union is not a `Union`.
+    Union(Alternation),
+    /// Maps to any singular [`Game`].
+    Singular(SingularGameExpr),
 }
 
 impl GameExpr {
-    /// Creates the simplest `GameExpr` that describes a sequence of `elements`.
-    ///
-    /// Assumes that each `GameExpr` of `elements` is not a [`Sequence`].
-    fn sequence(mut elements: Vec<Self>) -> Self {
-        if elements.len() == 1 {
-            elements
-                .pop()
-                .expect("popping element from a `Vec` with a length of 1")
-        } else {
-            Self::Sequence(elements)
-        }
-    }
-
-    /// Creates an empty [`Sequence`].
-    ///
-    /// Use this instead of `sequence` when it is known that the sequence will be empty.
-    #[allow(clippy::missing_const_for_fn)] // Issue with lint; Vec::new() is not yet stable as a const fn.
-    fn empty() -> Self {
-        Self::Sequence(Vec::new())
-    }
-
     /// Creates a `GameExpr` that repeats `self` as specified by `repeater`.
     fn repeat(self, repeater: &GameRepeater) -> Self {
-        let mut elements = Vec::new();
+        let mut concatenation = Vec::new();
 
         for _ in 0..repeater.minimum {
-            elements.extend(self.clone().into_elements());
+            concatenation.extend(Concatenation::from(self.clone()));
         }
 
         if repeater.maximum == usize::max_value() {
-            elements.push(Self::Repetition(Box::new(self)));
+            concatenation.push(Step::repetition(self));
         } else {
             for _ in repeater.minimum..repeater.maximum {
-                elements.push(self.clone().optional());
+                concatenation.push(Step::optional(self.clone()));
             }
         }
 
-        Self::sequence(elements)
+        concatenation.into()
     }
 
-    /// Creates a `GameExpr` that can be either empty or `self`.
-    fn optional(self) -> Self {
-        let mut branches = vec![Self::empty()];
-
-        branches.extend(self.into_branches());
-        Self::Union(branches)
-    }
-
-    /// Creates a `GameExpr::Item` from `id` and `self`.
+    /// Creates a `SingularGameExpr::Item` from `id` and `self`.
     fn name(self, id: Box<str>) -> Self {
-        Self::Item(id, Box::new(self))
+        Self::Singular(SingularGameExpr::Item(id, Box::new(self)))
     }
+}
 
-    /// Creates a [`Vec`] of all branches from `self`.
-    fn into_branches(self) -> Vec<Self> {
-        if let Self::Union(branches) = self {
-            branches
-        } else {
-            vec![self]
+impl From<Branch> for GameExpr {
+    fn from(value: Branch) -> Self {
+        match value {
+            Branch::Sequence(concatenation) => Self::Sequence(concatenation),
+            Branch::Singular(game) => Self::Singular(game),
         }
     }
+}
 
-    /// Converts `self` into a sequence of `GameExpr`s.
-    fn into_elements(self) -> Vec<Self> {
-        if let Self::Sequence(elements) = self {
-            elements
+impl From<char> for GameExpr {
+    fn from(value: char) -> Self {
+        ScentExpr::from(value).into()
+    }
+}
+
+impl From<Concatenation> for GameExpr {
+    /// Ensures that created GameExpr is as simple as possible.
+    fn from(mut value: Concatenation) -> Self {
+        if value.len() == 1 {
+            value
+                .pop()
+                .expect("popping element from a `Vec` with a length of 1")
+                // Convert Step into GameExpr.
+                .into()
         } else {
-            vec![self]
+            Self::Sequence(value)
+        }
+    }
+}
+
+impl From<ScentExpr> for GameExpr {
+    fn from(value: ScentExpr) -> Self {
+        Self::Singular(value.into())
+    }
+}
+
+impl From<Step> for GameExpr {
+    fn from(value: Step) -> Self {
+        match value {
+            Step::Union(alternation) => Self::Union(alternation),
+            Step::Singular(game) => Self::Singular(game),
         }
     }
 }
 
 impl ToTokens for GameExpr {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
-        match self {
-            Self::Char(c) => {
-                tokens.extend(quote! {
-                    Game::Char(#c)
-                });
+        tokens.extend(match self {
+            Self::Sequence(concatenation) => {
+                quote! {
+                    Game::Sequence(&[#(#concatenation),*])
+                }
             }
-            Self::Range(start, end) => {
-                tokens.extend(quote! {
-                    Game::Range(#start, #end)
-                });
+            Self::Union(alternation) => {
+                quote! {
+                    Game::Union(&[#(#alternation),*])
+                }
             }
-            Self::Sequence(elements) => {
-                tokens.extend(quote! {
-                    Game::Sequence(&[#(#elements),*])
-                });
+            Self::Singular(game) => {
+                quote! {
+                    #game
+                }
             }
-            Self::Union(branches) => {
-                tokens.extend(quote! {
-                    Game::Union(&[#(#branches),*])
-                });
-            }
-            Self::Repetition(game) => {
-                tokens.extend(quote! {
-                    Game::Repetition(&#game)
-                });
-            }
-            Self::Item(id, game) => {
-                tokens.extend(quote! {
-                    Game::Item(#id, &#game)
-                });
-            }
-            Self::Path(path) => {
-                path.to_tokens(tokens);
-            }
-        }
+        });
     }
 }
 
@@ -307,14 +276,14 @@ impl TryFrom<ExprBinary> for GameExpr {
 
         match value.op {
             BinOp::BitOr(..) => {
-                let mut branches = lhs.into_branches();
-                branches.append(&mut rhs.into_branches());
-                Ok(Self::Union(branches))
+                let mut alternation: Alternation = lhs.into();
+                alternation.append(&mut rhs.into());
+                Ok(Self::Union(alternation))
             }
             BinOp::Add(..) => {
-                let mut elements = lhs.into_elements();
-                elements.append(&mut rhs.into_elements());
-                Ok(Self::sequence(elements))
+                let mut concatenation: Concatenation = lhs.into();
+                concatenation.append(&mut rhs.into());
+                Ok(concatenation.into())
             }
             BinOp::BitAnd(..)
             | BinOp::Sub(..)
@@ -366,12 +335,12 @@ impl TryFrom<ExprPath> for GameExpr {
     fn try_from(value: ExprPath) -> Result<Self, Self::Error> {
         if let Some(ident) = value.path.get_ident() {
             if ident.to_string().as_str() == "None" {
-                return Ok(Self::empty());
+                return Ok(Branch::empty().into());
             }
         }
 
         // Assume path is valid.
-        Ok(Self::Path(value.path))
+        Ok(Self::Singular(SingularGameExpr::Path(value.path)))
     }
 }
 
@@ -379,14 +348,15 @@ impl TryFrom<ExprRange> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
-        Ok(Self::Range(
+        Ok(ScentExpr::Range(
             value
                 .from
                 .map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?,
             value
                 .to
                 .map_or(Ok('\u{10ffff}'), |to| char_try_from_expr(*to))?,
-        ))
+        )
+        .into())
     }
 }
 
@@ -394,7 +364,7 @@ impl TryFrom<ExprTry> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprTry) -> Result<Self, Self::Error> {
-        Self::try_from(*value.expr).map(Self::optional)
+        Self::try_from(*value.expr).map(|game| Step::optional(game).into())
     }
 }
 
@@ -432,8 +402,13 @@ impl TryFrom<Lit> for GameExpr {
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
-            Lit::Char(c) => Ok(Self::Char(c.value())),
-            Lit::Str(s) => Ok(Self::sequence(s.value().chars().map(Self::Char).collect())),
+            Lit::Char(c) => Ok(c.value().into()),
+            Lit::Str(s) => Ok(s
+                .value()
+                .chars()
+                .map(|c| c.into())
+                .collect::<Concatenation>()
+                .into()),
             Lit::ByteStr(..)
             | Lit::Byte(..)
             | Lit::Int(..)
@@ -447,6 +422,179 @@ impl TryFrom<Lit> for GameExpr {
     }
 }
 
+/// The component of a [`Game::Union`]; i.e. a [`Vec`] of [`Branch`]es;
+type Alternation = Vec<Branch>;
+
+impl From<GameExpr> for Alternation {
+    fn from(value: GameExpr) -> Self {
+        match value {
+            GameExpr::Union(alternation) => alternation,
+            GameExpr::Singular(game) => vec![game.into()],
+            GameExpr::Sequence(elements) => vec![Branch::Sequence(elements)],
+        }
+    }
+}
+
+/// The component of a [`Game::Sequence`]; i.e. a [`Vec`] of [`Step`]s;
+type Concatenation = Vec<Step>;
+
+impl From<GameExpr> for Concatenation {
+    fn from(value: GameExpr) -> Self {
+        match value {
+            GameExpr::Sequence(elements) => elements,
+            GameExpr::Union(alternation) => vec![Step::Union(alternation)],
+            GameExpr::Singular(game) => vec![Step::Singular(game)],
+        }
+    }
+}
+
+/// Maps to [`Game`] expressions other than [`Game::Sequence`].
+#[derive(Clone, Debug)]
+enum Step {
+    /// Maps to [`Game`] expressions that are singular.
+    Singular(SingularGameExpr),
+    /// Maps to [`Game::Union`].
+    ///
+    /// Each `GameExpr` in the given [`Vec`] shall not be a `Union`.
+    Union(Vec<Branch>),
+}
+
+impl Step {
+    /// Creates a `Step` that is a repetition of `game`.
+    fn repetition(game: GameExpr) -> Self {
+        SingularGameExpr::Repetition(Box::new(game)).into()
+    }
+
+    /// Creates a `Step` that can be either empty or `game`.
+    fn optional(game: GameExpr) -> Self {
+        let mut alternation = vec![Branch::empty()];
+
+        alternation.extend(Alternation::from(game));
+        // Because size of alternation is at least 2, it will always be a Union.
+        Self::Union(alternation)
+    }
+}
+
+impl From<char> for Step {
+    fn from(value: char) -> Self {
+        ScentExpr::from(value).into()
+    }
+}
+
+impl From<ScentExpr> for Step {
+    fn from(value: ScentExpr) -> Self {
+        SingularGameExpr::Scent(value).into()
+    }
+}
+
+impl From<SingularGameExpr> for Step {
+    fn from(value: SingularGameExpr) -> Self {
+        Self::Singular(value)
+    }
+}
+
+impl ToTokens for Step {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Singular(game) => {
+                quote! {
+                    #game
+                }
+            }
+            Self::Union(branches) => {
+                quote! {
+                    Game::Union(&[#(#branches),*])
+                }
+            }
+        });
+    }
+}
+
+/// Maps with [`Game`] expressions that can be part of a [`Game::Union`].
+#[derive(Clone, Debug)]
+enum Branch {
+    /// Maps with [`Game`]s that are singular.
+    Singular(SingularGameExpr),
+    /// Maps with [`Game::Sequence`].
+    Sequence(Concatenation),
+}
+
+impl Branch {
+    /// Creates a new `Branch` that matches the null set.
+    #[allow(clippy::missing_const_for_fn)] // Lint incorrectly thinks Vec::new() is stable as a const fn.
+    fn empty() -> Self {
+        Self::Sequence(Vec::new())
+    }
+}
+
+impl ToTokens for Branch {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Singular(game) => {
+                quote! {
+                    #game
+                }
+            }
+            Self::Sequence(elements) => {
+                quote! {
+                    Game::Sequence(&[#(#elements),*])
+                }
+            }
+        });
+    }
+}
+
+impl From<SingularGameExpr> for Branch {
+    fn from(value: SingularGameExpr) -> Self {
+        Self::Singular(value)
+    }
+}
+
+/// Maps to [`Game`] expressions that refer to a singular [`Game`].
+#[derive(Clone, Debug)]
+enum SingularGameExpr {
+    /// Maps to [`Game::Single`].
+    Scent(ScentExpr),
+    /// Maps to [`Game::Repetition`].
+    Repetition(Box<GameExpr>),
+    /// Maps to [`Game::Item`].
+    Item(Box<str>, Box<GameExpr>),
+    /// Maps to the [`Path`] of a [`Game`]
+    Path(Path),
+}
+
+impl From<ScentExpr> for SingularGameExpr {
+    fn from(value: ScentExpr) -> Self {
+        Self::Scent(value)
+    }
+}
+
+impl ToTokens for SingularGameExpr {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Scent(scent) => {
+                quote! {
+                    Game::Single(#scent)
+                }
+            }
+            Self::Repetition(game) => {
+                quote! {
+                    Game::Repetition(&#game)
+                }
+            }
+            Self::Item(id, game) => {
+                quote! {
+                    Game::Item(#id, &#game)
+                }
+            }
+            Self::Path(path) => {
+                quote! {
+                    #path
+                }
+            }
+        });
+    }
+}
 /// Signifies the number of times a [`GameExpr`] can be repeated.
 #[derive(Debug)]
 struct GameRepeater {
@@ -539,6 +687,39 @@ impl TryFrom<Lit> for GameRepeater {
             minimum,
             maximum: 0,
         })
+    }
+}
+
+// Cannot use cur::Scent because adding cur as a dependency would be circular.
+/// Maps to [`Scent`] expressions.
+#[derive(Clone, Debug)]
+enum ScentExpr {
+    /// Maps to [`Scent::Char`].
+    Char(char),
+    /// Maps to [`Scent::Range`].
+    Range(char, char),
+}
+
+impl From<char> for ScentExpr {
+    fn from(value: char) -> Self {
+        Self::Char(value)
+    }
+}
+
+impl ToTokens for ScentExpr {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Char(c) => {
+                quote! {
+                    Scent::Char(#c)
+                }
+            }
+            Self::Range(start, end) => {
+                quote! {
+                    Scent::Range(#start, #end)
+                }
+            }
+        });
     }
 }
 

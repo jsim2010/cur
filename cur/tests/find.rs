@@ -1,5 +1,5 @@
 #![allow(clippy::cognitive_complexity)] // This is unavoidable in certain tests.
-use cur::{Cur, Game};
+use cur::{Cur, Game, Scent};
 
 macro_rules! assert_find {
     ($cur:ident; $land:expr; $start:expr, $finish:expr, $s:expr) => {
@@ -20,10 +20,10 @@ fn empty() {
     assert_find!(cur; "a"; 0, 0, "");
 }
 
-/// [`Game::Char`] shall find the first [`Find`].
+/// [`Scent::Char`] shall find the first [`Find`].
 #[test]
 fn char() {
-    let cur = Cur::new(Game::Char('a'));
+    let cur = Cur::new(Game::Single(Scent::Char('a')));
 
     assert_find!(cur; "a"; 0, 1, "a");
     assert_find!(cur; "ab"; 0, 1, "a");
@@ -32,10 +32,10 @@ fn char() {
     assert!(cur.find("b").is_none());
 }
 
-/// [`Game::Range`] shall find the first [`Find`].
+/// [`Scent::Range`] shall find the first [`Find`].
 #[test]
 fn range() {
-    let cur = Cur::new(Game::Range('b', 'd'));
+    let cur = Cur::new(Game::Single(Scent::Range('b', 'd')));
 
     assert_find!(cur; "b"; 0, 1, "b");
     assert_find!(cur; "cc"; 0, 1, "c");
@@ -46,13 +46,13 @@ fn range() {
     assert!(cur.find("e").is_none());
 }
 
-/// [`Game::Union`] of [`Game::Char`]s shall find the first [`Find`].
+/// [`Game::Union`] of [`Scent::Char`]s shall find the first [`Find`].
 #[test]
 fn union_of_chars() {
     let cur = Cur::new(Game::Union(&[
-        Game::Char('a'),
-        Game::Char('b'),
-        Game::Char('c'),
+        Game::Single(Scent::Char('a')),
+        Game::Single(Scent::Char('b')),
+        Game::Single(Scent::Char('c')),
     ]));
 
     assert_find!(cur; "a"; 0, 1, "a");
@@ -63,13 +63,13 @@ fn union_of_chars() {
     assert!(cur.find("d").is_none());
 }
 
-/// [`Game::Sequence`] of [`Game::Char`]s shall find the first [`Find`].
+/// [`Game::Sequence`] of [`Scent::Char`]s shall find the first [`Find`].
 #[test]
 fn sequence_of_chars() {
     let cur = Cur::new(Game::Sequence(&[
-        Game::Char('a'),
-        Game::Char('b'),
-        Game::Char('c'),
+        Game::Single(Scent::Char('a')),
+        Game::Single(Scent::Char('b')),
+        Game::Single(Scent::Char('c')),
     ]));
 
     assert_find!(cur; "abc"; 0, 3, "abc");
@@ -85,9 +85,16 @@ fn sequence_of_chars() {
 #[test]
 fn union_sequences() {
     let cur = Cur::new(Game::Union(&[
-        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')]),
-        Game::Sequence(&[Game::Char('d'), Game::Char('e')]),
-        Game::Char('f'),
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c')),
+        ]),
+        Game::Sequence(&[
+            Game::Single(Scent::Char('d')),
+            Game::Single(Scent::Char('e')),
+        ]),
+        Game::Single(Scent::Char('f')),
     ]));
 
     assert_find!(cur; "abc"; 0, 3, "abc");
@@ -103,7 +110,7 @@ fn union_sequences() {
 /// [`Game::Repetition`] shall find a [`Find`] with start and end of 0.
 #[test]
 fn min_repetition() {
-    let cur = Cur::new(Game::Repetition(&Game::Char('a')));
+    let cur = Cur::new(Game::Repetition(&Game::Single(Scent::Char('a'))));
 
     assert_find!(cur; ""; 0, 0, "");
     assert_find!(cur; "a"; 0, 0, "");
@@ -115,9 +122,9 @@ fn min_repetition() {
 #[test]
 fn sequence_repetition_and_repeat() {
     let cur = Cur::new(Game::Sequence(&[
-        Game::Char('b'),
-        Game::Repetition(&Game::Char('a')),
-        Game::Char('b'),
+        Game::Single(Scent::Char('b')),
+        Game::Repetition(&Game::Single(Scent::Char('a'))),
+        Game::Single(Scent::Char('b')),
     ]));
 
     assert_find!(cur; "bb"; 0, 2, "bb");

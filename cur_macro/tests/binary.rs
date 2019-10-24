@@ -1,4 +1,4 @@
-use cur::Game;
+use cur::{Game, Scent};
 use cur_macro::game;
 
 /// BitOr is replaced by [`Game::Union`].
@@ -7,7 +7,13 @@ fn union() {
     #[game]
     const UNION: Game = 'a' | 'b';
 
-    assert_eq!(UNION, Game::Union(&[Game::Char('a'), Game::Char('b')]));
+    assert_eq!(
+        UNION,
+        Game::Union(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b'))
+        ])
+    );
 }
 
 /// Multiple BitOrs are replaced by a single [`Game::Union`].
@@ -18,7 +24,11 @@ fn multiple_union() {
 
     assert_eq!(
         MULTIPLE_UNION,
-        Game::Union(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
+        Game::Union(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c'))
+        ])
     );
 }
 
@@ -30,7 +40,10 @@ fn sequence() {
 
     assert_eq!(
         SEQUENCE,
-        Game::Sequence(&[Game::Char('a'), Game::Char('b')])
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b'))
+        ])
     );
 }
 
@@ -42,6 +55,10 @@ fn multiple_sequence() {
 
     assert_eq!(
         MULTIPLE_SEQUENCE,
-        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c'))
+        ])
     );
 }

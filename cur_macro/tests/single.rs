@@ -1,4 +1,4 @@
-use cur::Game;
+use cur::{Game, Scent};
 use cur_macro::game;
 
 /// [`None`] is replaced by an empty [`Game::Sequence`].
@@ -10,25 +10,25 @@ fn none() {
     assert_eq!(EMPTY, Game::Sequence(&[]));
 }
 
-/// [`char`] is replaced by [`Game::Char`].
+/// [`char`] is replaced by [`Game::Single`].
 #[test]
 fn char() {
     #[game]
     const CHAR: Game = 'a';
 
-    assert_eq!(CHAR, Game::Char('a'));
+    assert_eq!(CHAR, Game::Single(Scent::Char('a')));
 }
 
-/// [`&str`] with a single char is replaced by [`Game::Char`].
+/// [`&str`] with a single char is replaced by [`Game::Single`].
 #[test]
 fn single_char_str() {
     #[game]
     const SINGLE_CHAR: Game = "a";
 
-    assert_eq!(SINGLE_CHAR, Game::Char('a'));
+    assert_eq!(SINGLE_CHAR, Game::Single(Scent::Char('a')));
 }
 
-/// [`&str`] is replaced by [`Game::Sequence`] of [`Game::Char`]s.
+/// [`&str`] is replaced by [`Game::Sequence`] of [`Game::Single`]s.
 #[test]
 fn string() {
     #[game]
@@ -36,7 +36,11 @@ fn string() {
 
     assert_eq!(
         STR,
-        Game::Sequence(&[Game::Char('a'), Game::Char('b'), Game::Char('c')])
+        Game::Sequence(&[
+            Game::Single(Scent::Char('a')),
+            Game::Single(Scent::Char('b')),
+            Game::Single(Scent::Char('c'))
+        ])
     );
 }
 
@@ -46,7 +50,7 @@ fn parenthesis() {
     #[game]
     const PARENTHESIS: Game = ('a');
 
-    assert_eq!(PARENTHESIS, Game::Char('a'));
+    assert_eq!(PARENTHESIS, Game::Single(Scent::Char('a')));
 }
 
 /// Range of [`chars`].
@@ -55,7 +59,7 @@ fn range() {
     #[game]
     const RANGE: Game = 'a'..'z';
 
-    assert_eq!(RANGE, Game::Range('a', 'z'));
+    assert_eq!(RANGE, Game::Single(Scent::Range('a', 'z')));
 }
 
 /// Type ascription is replaced by [`Game::Item`].
@@ -64,5 +68,5 @@ fn type_ascription() {
     #[game]
     const ARTICLE: Game = 'a': id;
 
-    assert_eq!(ARTICLE, Game::Item("id", &Game::Char('a')));
+    assert_eq!(ARTICLE, Game::Item("id", &Game::Single(Scent::Char('a'))));
 }
