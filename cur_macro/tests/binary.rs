@@ -1,17 +1,15 @@
-use cur::{Game, Scent};
-use cur_macro::game;
+use cur::prelude::*;
 
 /// BitOr is replaced by [`Game::Union`].
 #[test]
 fn union() {
-    #[game]
-    const UNION: Game = 'a' | 'b';
+    game!(UNION = 'a' | 'b');
 
     assert_eq!(
-        UNION,
-        Game::Union(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b'))
+        *UNION,
+        Game::Union(vec![
+            Branch::Single(Scent::Char('a')),
+            Branch::Single(Scent::Char('b'))
         ])
     );
 }
@@ -19,15 +17,14 @@ fn union() {
 /// Multiple BitOrs are replaced by a single [`Game::Union`].
 #[test]
 fn multiple_union() {
-    #[game]
-    const MULTIPLE_UNION: Game = 'a' | 'b' | 'c';
+    game!(MULTIPLE_UNION = 'a' | 'b' | 'c');
 
     assert_eq!(
-        MULTIPLE_UNION,
-        Game::Union(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b')),
-            Game::Single(Scent::Char('c'))
+        *MULTIPLE_UNION,
+        Game::Union(vec![
+            Branch::Single(Scent::Char('a')),
+            Branch::Single(Scent::Char('b')),
+            Branch::Single(Scent::Char('c'))
         ])
     );
 }
@@ -35,14 +32,13 @@ fn multiple_union() {
 /// Add is replaced by [`Game::Sequence`].
 #[test]
 fn sequence() {
-    #[game]
-    const SEQUENCE: Game = 'a' + 'b';
+    game!(SEQUENCE = 'a' + 'b');
 
     assert_eq!(
-        SEQUENCE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b'))
+        *SEQUENCE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('b'))
         ])
     );
 }
@@ -50,15 +46,14 @@ fn sequence() {
 /// Multiple Adds is replaced by a single [`Game::Sequence`].
 #[test]
 fn multiple_sequence() {
-    #[game]
-    const MULTIPLE_SEQUENCE: Game = 'a' + 'b' + 'c';
+    game!(MULTIPLE_SEQUENCE = 'a' + 'b' + 'c');
 
     assert_eq!(
-        MULTIPLE_SEQUENCE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b')),
-            Game::Single(Scent::Char('c'))
+        *MULTIPLE_SEQUENCE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('b')),
+            Step::Single(Scent::Char('c'))
         ])
     );
 }

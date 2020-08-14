@@ -1,75 +1,68 @@
-use cur::{Game, Scent};
-use cur_macro::game;
+use cur::prelude::*;
 
 /// Try.
 #[test]
 fn try_expr() {
-    #[game]
-    const TRY: Game = 'a'?;
+    game!(TRY = 'a'?);
 
     assert_eq!(
-        TRY,
-        Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+        *TRY,
+        Game::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
     );
 }
 
 /// Index with usize.
 #[test]
 fn exact() {
-    #[game]
-    const THREE_REPEATS: Game = 'a'[3];
+    game!(THREE_REPEATS = 'a'[3]);
 
     assert_eq!(
-        THREE_REPEATS,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a'))
+        *THREE_REPEATS,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a'))
         ])
     );
 }
 
 #[test]
 fn exactly_one() {
-    #[game]
-    const ONE_REPEAT: Game = 'a'[1];
+    game!(ONE_REPEAT = 'a'[1]);
 
-    assert_eq!(ONE_REPEAT, Game::Single(Scent::Char('a')));
+    assert_eq!(*ONE_REPEAT, Game::Single(Scent::Char('a')));
 }
 
 #[test]
 fn exactly_zero() {
-    #[game]
-    const ZERO_REPEAT: Game = 'a'[0];
+    game!(ZERO_REPEAT = 'a'[0]);
 
-    assert_eq!(ZERO_REPEAT, Game::Sequence(&[]));
+    assert_eq!(*ZERO_REPEAT, Game::Sequence(vec![]));
 }
 
 /// Index with RangeFull.
 #[test]
 fn zero_or_more() {
-    #[game]
-    const ZERO_OR_MORE: Game = 'a'[..];
+    game!(ZERO_OR_MORE = 'a'[..]);
 
     assert_eq!(
-        ZERO_OR_MORE,
-        Game::Repetition(&Game::Single(Scent::Char('a')))
+        *ZERO_OR_MORE,
+        Game::Repetition(Pattern::Single(Scent::Char('a')))
     );
 }
 
 /// Index with RangeFrom.
 #[test]
 fn start_or_more() {
-    #[game]
-    const THREE_OR_MORE: Game = 'a'[3..];
+    game!(THREE_OR_MORE = 'a'[3..]);
 
     assert_eq!(
-        THREE_OR_MORE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a')),
-            Game::Repetition(&Game::Single(Scent::Char('a')))
+        *THREE_OR_MORE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a')),
+            Step::Repetition(Pattern::Single(Scent::Char('a')))
         ])
     );
 }
@@ -77,15 +70,14 @@ fn start_or_more() {
 /// Index with RangeTo.
 #[test]
 fn less_than_end() {
-    #[game]
-    const LESS_THAN_FOUR: Game = 'a'[..4];
+    game!(LESS_THAN_FOUR = 'a'[..4]);
 
     assert_eq!(
-        LESS_THAN_FOUR,
-        Game::Sequence(&[
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+        *LESS_THAN_FOUR,
+        Game::Sequence(vec![
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
         ])
     );
 }
@@ -93,15 +85,14 @@ fn less_than_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn end_or_less() {
-    #[game]
-    const THREE_OR_LESS: Game = 'a'[..=3];
+    game!(THREE_OR_LESS = 'a'[..=3]);
 
     assert_eq!(
-        THREE_OR_LESS,
-        Game::Sequence(&[
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+        *THREE_OR_LESS,
+        Game::Sequence(vec![
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
         ])
     );
 }
@@ -109,16 +100,15 @@ fn end_or_less() {
 /// Index with Range.
 #[test]
 fn start_to_end() {
-    #[game]
-    const TWO_TO_FIVE: Game = 'a'[2..5];
+    game!(TWO_TO_FIVE = 'a'[2..5]);
 
     assert_eq!(
-        TWO_TO_FIVE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a')),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+        *TWO_TO_FIVE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a')),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
         ])
     );
 }
@@ -126,16 +116,15 @@ fn start_to_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn start_to_end_inclusive() {
-    #[game]
-    const TWO_TO_FOUR_INCLUSIVE: Game = 'a'[2..=4];
+    game!(TWO_TO_FOUR_INCLUSIVE = 'a'[2..=4]);
 
     assert_eq!(
-        TWO_TO_FOUR_INCLUSIVE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('a')),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))]),
-            Game::Union(&[Game::Sequence(&[]), Game::Single(Scent::Char('a'))])
+        *TWO_TO_FOUR_INCLUSIVE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('a')),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
+            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
         ])
     );
 }
@@ -143,15 +132,14 @@ fn start_to_end_inclusive() {
 /// BitOr with Try.
 #[test]
 fn try_union() {
-    #[game]
-    const TRY_UNION: Game = ('a' | 'b')?;
+    game!(TRY_UNION = ('a' | 'b')?);
 
     assert_eq!(
-        TRY_UNION,
-        Game::Union(&[
-            Game::Sequence(&[]),
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b'))
+        *TRY_UNION,
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Single(Scent::Char('a')),
+            Branch::Single(Scent::Char('b'))
         ])
     );
 }
@@ -159,20 +147,19 @@ fn try_union() {
 /// BitOr with Index.
 #[test]
 fn repeat_union() {
-    #[game]
-    const REPEAT_UNION: Game = ('a' | 'b')[1..3];
+    game!(REPEAT_UNION = ('a' | 'b')[1..3]);
 
     assert_eq!(
-        REPEAT_UNION,
-        Game::Sequence(&[
-            Game::Union(&[
-                Game::Single(Scent::Char('a')),
-                Game::Single(Scent::Char('b'))
+        *REPEAT_UNION,
+        Game::Sequence(vec![
+            Step::Union(vec![
+                Branch::Single(Scent::Char('a')),
+                Branch::Single(Scent::Char('b'))
             ]),
-            Game::Union(&[
-                Game::Sequence(&[]),
-                Game::Single(Scent::Char('a')),
-                Game::Single(Scent::Char('b'))
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a')),
+                Branch::Single(Scent::Char('b'))
             ])
         ])
     );
@@ -181,16 +168,15 @@ fn repeat_union() {
 /// Add with Try.
 #[test]
 fn try_sequence() {
-    #[game]
-    const TRY_SEQUENCE: Game = ('a' + 'b')?;
+    game!(TRY_SEQUENCE = ('a' + 'b')?);
 
     assert_eq!(
-        TRY_SEQUENCE,
-        Game::Union(&[
-            Game::Sequence(&[]),
-            Game::Sequence(&[
-                Game::Single(Scent::Char('a')),
-                Game::Single(Scent::Char('b'))
+        *TRY_SEQUENCE,
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Sequence(vec![
+                Step::Single(Scent::Char('a')),
+                Step::Single(Scent::Char('b'))
             ]),
         ])
     );
@@ -199,17 +185,16 @@ fn try_sequence() {
 /// Add with Index.
 #[test]
 fn repeat_sequence() {
-    #[game]
-    const REPEAT_SEQUENCE: Game = ('a' + 'b')[1..];
+    game!(REPEAT_SEQUENCE = ('a' + 'b')[1..]);
 
     assert_eq!(
-        REPEAT_SEQUENCE,
-        Game::Sequence(&[
-            Game::Single(Scent::Char('a')),
-            Game::Single(Scent::Char('b')),
-            Game::Repetition(&Game::Sequence(&[
-                Game::Single(Scent::Char('a')),
-                Game::Single(Scent::Char('b'))
+        *REPEAT_SEQUENCE,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Single(Scent::Char('b')),
+            Step::Repetition(Pattern::Sequence(vec![
+                Step::Single(Scent::Char('a')),
+                Step::Single(Scent::Char('b'))
             ]),)
         ])
     );
