@@ -96,7 +96,7 @@ fn range_inclusvie() {
 
 /// A type expression is replaced by a `Game::Item`.
 #[test]
-fn type() {
+fn type_expr() {
     game!(TYPE = 'a': id);
 
     assert_eq!(*TYPE, Game::Item("id", &Game::Single(Scent::Char('a'))));

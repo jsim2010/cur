@@ -1,6 +1,6 @@
 use cur::*;
 
-/// Try.
+/// `A?` is replaced by a `Game::Union` of nothing and `A`.
 #[test]
 fn try_expr() {
     game!(TRY = 'a'?);
@@ -8,6 +8,70 @@ fn try_expr() {
     assert_eq!(
         *TRY,
         Game::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+    );
+}
+
+/// `(A | B)? is replaced by a single `Game::Union`.
+#[test]
+fn try_union() {
+    game!(TRY_UNION = ('a' | 'b')?);
+
+    assert_eq!(
+        *TRY_UNION,
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Single(Scent::Char('a')),
+            Branch::Single(Scent::Char('b'))
+        ])
+    );
+}
+
+/// `A | B?` is replaced by a single `Game::Union`.
+#[test]
+fn union_with_try() {
+    game!(UNION_WITH_TRY = 'a' | 'b'?);
+
+    assert_eq!(
+        *UNION_WITH_TRY,
+        Game::Union(vec![
+            Branch::Single(Scent::Char('a')),
+            Branch::Sequence(vec![]),
+            Branch::Single(Scent::Char('b'))
+        ])
+    );
+}
+
+/// `(A + B)?` is replaced by a `Game::Union`.
+#[test]
+fn try_sequence() {
+    game!(TRY_SEQUENCE = ('a' + 'b')?);
+
+    assert_eq!(
+        *TRY_SEQUENCE,
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Sequence(vec![
+                Step::Single(Scent::Char('a')),
+                Step::Single(Scent::Char('b'))
+            ]),
+        ])
+    );
+}
+
+/// `A + B?` is replaced by a `Game::Sequence`.
+#[test]
+fn sequence_with_try() {
+    game!(SEQUENCE_WITH_TRY = 'a' + 'b'?);
+
+    assert_eq!(
+        *SEQUENCE_WITH_TRY,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('a')),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('b')),
+            ]),
+        ]),
     );
 }
 
@@ -129,21 +193,6 @@ fn start_to_end_inclusive() {
     );
 }
 
-/// BitOr with Try.
-#[test]
-fn try_union() {
-    game!(TRY_UNION = ('a' | 'b')?);
-
-    assert_eq!(
-        *TRY_UNION,
-        Game::Union(vec![
-            Branch::Sequence(vec![]),
-            Branch::Single(Scent::Char('a')),
-            Branch::Single(Scent::Char('b'))
-        ])
-    );
-}
-
 /// BitOr with Index.
 #[test]
 fn repeat_union() {
@@ -161,23 +210,6 @@ fn repeat_union() {
                 Branch::Single(Scent::Char('a')),
                 Branch::Single(Scent::Char('b'))
             ])
-        ])
-    );
-}
-
-/// Add with Try.
-#[test]
-fn try_sequence() {
-    game!(TRY_SEQUENCE = ('a' + 'b')?);
-
-    assert_eq!(
-        *TRY_SEQUENCE,
-        Game::Union(vec![
-            Branch::Sequence(vec![]),
-            Branch::Sequence(vec![
-                Step::Single(Scent::Char('a')),
-                Step::Single(Scent::Char('b'))
-            ]),
         ])
     );
 }

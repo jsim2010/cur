@@ -119,9 +119,9 @@ impl ToTokens for GameExpr {
                     }
                 }
             }
-            Self::Union(alternation) => {
+            Self::Union(branches) => {
                 quote! {
-                    (#(#alternation)|*)
+                    (#(#branches)|*)
                 }
             }
             Self::Item(name, game) => {
