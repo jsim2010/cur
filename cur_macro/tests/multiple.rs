@@ -1,11 +1,11 @@
-use cur::prelude::*;
+use cur::*;
 
-game!(DIGIT = '0'..'9');
+game!(DIGIT = '0'..='9');
 
 mod scents {
     use super::*;
 
-    game!(pub LOWERCASE = 'a'..'z');
+    game!(pub LOWERCASE = 'a'..='z');
 }
 
 /// A [`Game`].
@@ -58,7 +58,7 @@ fn option() {
 /// A repetition.
 #[test]
 fn repetition() {
-    game!(ZERO_OR_MORE_DIGITS = DIGIT[..]);
+    game!(ZERO_OR_MORE_DIGITS = [DIGIT; ..]);
 
     assert_eq!(
         *ZERO_OR_MORE_DIGITS,

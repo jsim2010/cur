@@ -13,9 +13,12 @@ use syn::{
     parse_macro_input, Type,
 };
 use syn::{
-    BinOp, Error, Expr, ExprBinary, ExprAssign, ExprIndex, ExprPath, ExprRange, ExprTry, ExprType, Lit, Path,
+    BinOp, Error, Expr, ExprBinary, ExprAssign, ExprRepeat, ExprPath, ExprRange, ExprTry, ExprType, Lit, Path,
     RangeLimits, Visibility,
 };
+
+const FIRST_CHAR_VALUE_AFTER_SURROGATES: u32 = 0xe000;
+const LAST_CHAR_BEFORE_SURROGATES: char = '\u{d7ff}';
 
 /// Converts `item` into a [`Game`].
 ///
@@ -25,7 +28,7 @@ use syn::{
 ///
 /// # Example(s)
 /// ```
-/// use cur::prelude::*;
+/// use cur::*;
 ///
 /// game!(HELLO_WORLD = "Hello world!");
 /// ```
@@ -40,6 +43,7 @@ pub fn game(input: TokenStream) -> TokenStream {
 
 /// Specifies input used to create a [`Game`] definition.
 struct Input {
+    /// The visibility of the `Game`.
     vis: Visibility,
     /// Identifier of the [`Game`].
     name: Expr,
@@ -145,15 +149,15 @@ impl TryFrom<Expr> for GameExpr {
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
         match value {
             Expr::Binary(binary) => binary.try_into(),
-            Expr::Index(index) => index.try_into(),
             Expr::Path(path) => path.try_into(),
             Expr::Lit(literal) => literal.lit.try_into(),
             Expr::Paren(paren) => (*paren.expr).try_into(),
             Expr::Try(try_expr) => try_expr.try_into(),
             Expr::Range(range) => range.try_into(),
             Expr::Type(type_expr) => type_expr.try_into(),
-            Expr::Repeat(..)
-            | Expr::Unary(..)
+            Expr::Repeat(repeat_expr) => repeat_expr.try_into(),
+            Expr::Unary(..)
+            | Expr::Index(..)
             | Expr::Box(..)
             | Expr::Await(..)
             | Expr::Array(..)
@@ -234,15 +238,6 @@ impl TryFrom<ExprBinary> for GameExpr {
     }
 }
 
-impl TryFrom<ExprIndex> for GameExpr {
-    type Error = Error;
-
-    fn try_from(value: ExprIndex) -> Result<Self, Self::Error> {
-        let repeater = GameRepeater::try_from(*value.index)?;
-        Ok(PatternExpr::from(GameExpr::try_from(*value.expr)?).repeat(&repeater))
-    }
-}
-
 impl TryFrom<ExprPath> for GameExpr {
     type Error = Error;
 
@@ -261,16 +256,42 @@ impl TryFrom<ExprPath> for GameExpr {
 impl TryFrom<ExprRange> for GameExpr {
     type Error = Error;
 
-    fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
+    fn try_from(range: ExprRange) -> Result<Self, Self::Error> {
+        let end = if let Some(to) = range.to {
+            let to_char = char_try_from_expr(*to.clone())?;
+
+            if let RangeLimits::HalfOpen(..) = range.limits {
+                let end_code = u32::from(to_char);
+
+                // Because end_code came from a char, FIRST_CHAR_VALUE_AFTER_SURROGATES is the only possible value that requires special handling.
+                if end_code == FIRST_CHAR_VALUE_AFTER_SURROGATES {
+                    LAST_CHAR_BEFORE_SURROGATES
+                } else {
+                    char::try_from(end_code - 1).map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
+                }
+            } else {
+                to_char
+            }
+        } else {
+            '\u{10ffff}'
+        };
+
         Ok(ScentExpr::Range(
-            value
+            range
                 .from
                 .map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?,
-            value
-                .to
-                .map_or(Ok('\u{10ffff}'), |to| char_try_from_expr(*to))?,
+            end,
         )
         .into())
+    }
+}
+
+impl TryFrom<ExprRepeat> for GameExpr {
+    type Error = Error;
+
+    fn try_from(repeat: ExprRepeat) -> Result<Self, Self::Error> {
+        let repeater = GameRepeater::try_from(*repeat.len)?;
+        Ok(PatternExpr::from(GameExpr::try_from(*repeat.expr)?).repeat(&repeater))
     }
 }
 
@@ -536,6 +557,7 @@ impl TryFrom<Lit> for GameRepeater {
 }
 
 // Cannot use cur::Scent because adding cur as a dependency would be circular.
+// TODO: Should combine Scent and ScentExpr and move to a separate dependency that both cur and cur_macro use.
 /// Maps to [`Scent`] expressions.
 #[derive(Clone, Debug)]
 enum ScentExpr {

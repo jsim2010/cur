@@ -1,4 +1,4 @@
-use cur::{Cur, prelude::*};
+use cur::*;
 
 macro_rules! assert_passes {
     ($cur:ident; $( $x:expr ),+) => {

@@ -1,6 +1,6 @@
-use cur::prelude::*;
+use cur::*;
 
-/// [`None`] is replaced by an empty [`Game::Sequence`].
+/// `None` is replaced by an empty `Game::Sequence`.
 #[test]
 fn none() {
     game!(EMPTY = None);
@@ -8,7 +8,7 @@ fn none() {
     assert_eq!(*EMPTY, Game::Sequence(vec![]));
 }
 
-/// [`char`] is replaced by [`Game::Single`].
+/// A single `char` is replaced by a matching `Game::Single`.
 #[test]
 fn char() {
     game!(CHAR = 'a');
@@ -16,7 +16,7 @@ fn char() {
     assert_eq!(*CHAR, Game::Single(Scent::Char('a')));
 }
 
-/// [`&str`] with a single char is replaced by [`Game::Single`].
+/// A `&str` of a single char is replaced by a matching `Game::Single`.
 #[test]
 fn single_char_str() {
     game!(SINGLE_CHAR = "a");
@@ -24,7 +24,7 @@ fn single_char_str() {
     assert_eq!(*SINGLE_CHAR, Game::Single(Scent::Char('a')));
 }
 
-/// [`&str`] is replaced by [`Game::Sequence`] of [`Game::Single`]s.
+/// A `&str` is replaced by a `Game::Sequence`.
 #[test]
 fn string() {
     game!(STR = "abc");
@@ -39,7 +39,7 @@ fn string() {
     );
 }
 
-/// Parenthesis is replaced by [`Game`] of the expression inside.
+/// A parenthesis around a single `Game` is replaced by the `Game`.
 #[test]
 fn parenthesis() {
     game!(PARENTHESIS = ('a'));
@@ -47,17 +47,56 @@ fn parenthesis() {
     assert_eq!(*PARENTHESIS, Game::Single(Scent::Char('a')));
 }
 
-/// Range of [`chars`].
+/// A `RangeFull` is replaced by a `Game::Single` matching any `char`.
+#[test]
+fn range_full() {
+    game!(ANY = ..);
+
+    assert_eq!(*ANY, Game::Single(Scent::Range('\u{0}', '\u{10ffff}')));
+}
+
+/// A `RangeFrom` is replaced by a `Game::Single` matching any `char` at or after the start.
+#[test]
+fn range_from() {
+    game!(FROM = 'A'..);
+
+    assert_eq!(*FROM, Game::Single(Scent::Range('A', '\u{10ffff}')));
+}
+
+/// A `RangeTo` is replaced by a `Game::Single` matching any `char` before the end.
+#[test]
+fn range_to() {
+    game!(TO = ..'Z');
+
+    assert_eq!(*TO, Game::Single(Scent::Range('\u{0}', 'Y')));
+}
+
+/// A `RangeToInclusive` is replaced by a `Game::Single` matching any `char` before or including the end.
+#[test]
+fn range_to_inclusive() {
+    game!(TO_INCLUSIVE = ..='Z');
+
+    assert_eq!(*TO_INCLUSIVE, Game::Single(Scent::Range('\u{0}', 'Z')));
+}
+/// A `Range` is replaced by a `Game::Single` matching any `char` at or after the start and before the end.
 #[test]
 fn range() {
     game!(RANGE = 'a'..'z');
 
-    assert_eq!(*RANGE, Game::Single(Scent::Range('a', 'z')));
+    assert_eq!(*RANGE, Game::Single(Scent::Range('a', 'y')));
 }
 
-/// Type ascription is replaced by [`Game::Item`].
+/// A `RangeInclusive` is replaced by a `Game::Single` matching any `char` inclusively between the start and end.
 #[test]
-fn type_ascription() {
+fn range_inclusvie() {
+    game!(RANGE_INCLUSIVE = 'a'..='z');
+
+    assert_eq!(*RANGE_INCLUSIVE, Game::Single(Scent::Range('a', 'z')));
+}
+
+/// A type expression is replaced by a `Game::Item`.
+#[test]
+fn type() {
     game!(TYPE = 'a': id);
 
     assert_eq!(*TYPE, Game::Item("id", &Game::Single(Scent::Char('a'))));

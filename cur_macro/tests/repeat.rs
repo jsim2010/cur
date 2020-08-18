@@ -1,4 +1,4 @@
-use cur::prelude::*;
+use cur::*;
 
 /// Try.
 #[test]
@@ -14,7 +14,7 @@ fn try_expr() {
 /// Index with usize.
 #[test]
 fn exact() {
-    game!(THREE_REPEATS = 'a'[3]);
+    game!(THREE_REPEATS = ['a'; 3]);
 
     assert_eq!(
         *THREE_REPEATS,
@@ -28,14 +28,14 @@ fn exact() {
 
 #[test]
 fn exactly_one() {
-    game!(ONE_REPEAT = 'a'[1]);
+    game!(ONE_REPEAT = ['a'; 1]);
 
     assert_eq!(*ONE_REPEAT, Game::Single(Scent::Char('a')));
 }
 
 #[test]
 fn exactly_zero() {
-    game!(ZERO_REPEAT = 'a'[0]);
+    game!(ZERO_REPEAT = ['a'; 0]);
 
     assert_eq!(*ZERO_REPEAT, Game::Sequence(vec![]));
 }
@@ -43,7 +43,7 @@ fn exactly_zero() {
 /// Index with RangeFull.
 #[test]
 fn zero_or_more() {
-    game!(ZERO_OR_MORE = 'a'[..]);
+    game!(ZERO_OR_MORE = ['a'; ..]);
 
     assert_eq!(
         *ZERO_OR_MORE,
@@ -54,7 +54,7 @@ fn zero_or_more() {
 /// Index with RangeFrom.
 #[test]
 fn start_or_more() {
-    game!(THREE_OR_MORE = 'a'[3..]);
+    game!(THREE_OR_MORE = ['a'; 3..]);
 
     assert_eq!(
         *THREE_OR_MORE,
@@ -70,7 +70,7 @@ fn start_or_more() {
 /// Index with RangeTo.
 #[test]
 fn less_than_end() {
-    game!(LESS_THAN_FOUR = 'a'[..4]);
+    game!(LESS_THAN_FOUR = ['a'; ..4]);
 
     assert_eq!(
         *LESS_THAN_FOUR,
@@ -85,7 +85,7 @@ fn less_than_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn end_or_less() {
-    game!(THREE_OR_LESS = 'a'[..=3]);
+    game!(THREE_OR_LESS = ['a'; ..=3]);
 
     assert_eq!(
         *THREE_OR_LESS,
@@ -100,7 +100,7 @@ fn end_or_less() {
 /// Index with Range.
 #[test]
 fn start_to_end() {
-    game!(TWO_TO_FIVE = 'a'[2..5]);
+    game!(TWO_TO_FIVE = ['a'; 2..5]);
 
     assert_eq!(
         *TWO_TO_FIVE,
@@ -116,7 +116,7 @@ fn start_to_end() {
 /// Index with RangeToInclusive.
 #[test]
 fn start_to_end_inclusive() {
-    game!(TWO_TO_FOUR_INCLUSIVE = 'a'[2..=4]);
+    game!(TWO_TO_FOUR_INCLUSIVE = ['a'; 2..=4]);
 
     assert_eq!(
         *TWO_TO_FOUR_INCLUSIVE,
@@ -147,7 +147,7 @@ fn try_union() {
 /// BitOr with Index.
 #[test]
 fn repeat_union() {
-    game!(REPEAT_UNION = ('a' | 'b')[1..3]);
+    game!(REPEAT_UNION = ['a' | 'b'; 1..3]);
 
     assert_eq!(
         *REPEAT_UNION,
@@ -185,7 +185,7 @@ fn try_sequence() {
 /// Add with Index.
 #[test]
 fn repeat_sequence() {
-    game!(REPEAT_SEQUENCE = ('a' + 'b')[1..]);
+    game!(REPEAT_SEQUENCE = ['a' + 'b'; 1..]);
 
     assert_eq!(
         *REPEAT_SEQUENCE,

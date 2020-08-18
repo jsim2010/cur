@@ -1,4 +1,4 @@
-use cur::prelude::*;
+use cur::*;
 
 /// BitOr is replaced by [`Game::Union`].
 #[test]

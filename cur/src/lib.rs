@@ -3,15 +3,10 @@
 
 extern crate alloc;
 
-pub mod prelude {
-    pub use {
-        super::{Branch, Pattern, Game, Step, Scent},
-        once_cell::sync::Lazy,
-        cur_macro::game,
-    };
-}
-
-pub use cur_macro::game;
+pub use {
+    cur_macro::game,
+    once_cell::sync::Lazy,
+};
 
 use {
     alloc::{collections::BTreeMap, vec, vec::Vec},
