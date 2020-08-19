@@ -51,7 +51,10 @@ fn option() {
 
     assert_eq!(
         *OPTIONAL_DIGIT,
-        Game::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Range('0', '9'))])
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Single(Scent::Range('0', '9'))
+        ])
     );
 }
 

@@ -3,14 +3,14 @@
 
 extern crate alloc;
 
-pub use {
-    cur_macro::game,
-    once_cell::sync::Lazy,
-};
+pub use {cur_macro::game, once_cell::sync::Lazy};
 
 use {
     alloc::{collections::BTreeMap, vec, vec::Vec},
-    core::{ops::{Add, BitOr, Range}, str::Chars},
+    core::{
+        ops::{Add, BitOr, Range},
+        str::Chars,
+    },
 };
 
 /// Signifies a desired `char`.
@@ -134,15 +134,14 @@ impl Game {
         match self {
             Self::Single(scent) => vec![Step::Single(scent)],
             Self::Union(branches) => vec![Step::Union(branches)],
-            Self::Sequence(steps) => steps, 
+            Self::Sequence(steps) => steps,
             Self::Repetition(pattern) => vec![Step::Repetition(pattern)],
             Self::Item(name, game) => vec![Step::Item(name, game)],
         }
     }
 }
 
-impl Add for Game
-{
+impl Add for Game {
     type Output = Game;
 
     fn add(self, rhs: Self) -> Self::Output {
@@ -152,8 +151,7 @@ impl Add for Game
     }
 }
 
-impl BitOr for Game
-{
+impl BitOr for Game {
     type Output = Game;
 
     fn bitor(self, rhs: Self) -> Self::Output {
@@ -253,7 +251,16 @@ impl<'l> Find<'l> {
     fn new(range: Range<Spot<'l>>) -> Self {
         let start = range.start.len;
         let finish = range.end.len;
-        Self { start, finish, text: range.start.chars.as_str().get(..finish.checked_sub(start).unwrap()).unwrap() }
+        Self {
+            start,
+            finish,
+            text: range
+                .start
+                .chars
+                .as_str()
+                .get(..finish.checked_sub(start).unwrap())
+                .unwrap(),
+        }
     }
 
     /// Returns the first index of the match.
@@ -411,7 +418,8 @@ impl Cur {
 
     /// Returns if `land` matches the [`Game`] `self` is hunting.
     pub fn is_game(&self, land: &str) -> bool {
-        hunt(self.game.clone(), Spot::from(land), &mut Captures::new()).any(|finish| finish.is_end())
+        hunt(self.game.clone(), Spot::from(land), &mut Captures::new())
+            .any(|finish| finish.is_end())
     }
 
     /// Returns the first [`Find`] that matches the [`Game`] `self` is hunting starting from each consecutive [`Spot`] of `land`.

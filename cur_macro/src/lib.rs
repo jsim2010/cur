@@ -13,8 +13,8 @@ use syn::{
     parse_macro_input, Type,
 };
 use syn::{
-    BinOp, Error, Expr, ExprBinary, ExprAssign, ExprRepeat, ExprPath, ExprRange, ExprTry, ExprType, Lit, Path,
-    RangeLimits, Visibility,
+    BinOp, Error, Expr, ExprAssign, ExprBinary, ExprPath, ExprRange, ExprRepeat, ExprTry, ExprType,
+    Lit, Path, RangeLimits, Visibility,
 };
 
 const FIRST_CHAR_VALUE_AFTER_SURROGATES: u32 = 0xe000;
@@ -267,7 +267,8 @@ impl TryFrom<ExprRange> for GameExpr {
                 if end_code == FIRST_CHAR_VALUE_AFTER_SURROGATES {
                     LAST_CHAR_BEFORE_SURROGATES
                 } else {
-                    char::try_from(end_code - 1).map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
+                    char::try_from(end_code - 1)
+                        .map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
                 }
             } else {
                 to_char
@@ -341,11 +342,12 @@ impl TryFrom<Lit> for GameExpr {
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
             Lit::Char(c) => Ok(c.value().into()),
-            Lit::Str(s) => Ok(GameExpr::Sequence(s
-                .value()
-                .chars()
-                .map(|c| c.into())
-                .collect::<Vec<GameExpr>>())),
+            Lit::Str(s) => Ok(GameExpr::Sequence(
+                s.value()
+                    .chars()
+                    .map(|c| c.into())
+                    .collect::<Vec<GameExpr>>(),
+            )),
             Lit::ByteStr(..)
             | Lit::Byte(..)
             | Lit::Int(..)

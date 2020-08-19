@@ -7,7 +7,10 @@ fn try_expr() {
 
     assert_eq!(
         *TRY,
-        Game::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+        Game::Union(vec![
+            Branch::Sequence(vec![]),
+            Branch::Single(Scent::Char('a'))
+        ])
     );
 }
 
@@ -139,9 +142,18 @@ fn less_than_end() {
     assert_eq!(
         *LESS_THAN_FOUR,
         Game::Sequence(vec![
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ])
         ])
     );
 }
@@ -154,9 +166,18 @@ fn end_or_less() {
     assert_eq!(
         *THREE_OR_LESS,
         Game::Sequence(vec![
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ])
         ])
     );
 }
@@ -171,8 +192,14 @@ fn start_to_end() {
         Game::Sequence(vec![
             Step::Single(Scent::Char('a')),
             Step::Single(Scent::Char('a')),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ])
         ])
     );
 }
@@ -187,8 +214,14 @@ fn start_to_end_inclusive() {
         Game::Sequence(vec![
             Step::Single(Scent::Char('a')),
             Step::Single(Scent::Char('a')),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))]),
-            Step::Union(vec![Branch::Sequence(vec![]), Branch::Single(Scent::Char('a'))])
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ]),
+            Step::Union(vec![
+                Branch::Sequence(vec![]),
+                Branch::Single(Scent::Char('a'))
+            ])
         ])
     );
 }
