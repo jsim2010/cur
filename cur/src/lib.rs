@@ -6,7 +6,7 @@ extern crate alloc;
 pub use {cur_macro::game, once_cell::sync::Lazy};
 
 use {
-    alloc::{collections::BTreeMap, vec, vec::Vec},
+    alloc::{boxed::Box, collections::BTreeMap, vec, vec::Vec},
     core::{
         ops::{Add, BitOr, Range},
         str::Chars,
@@ -37,7 +37,7 @@ pub enum Branch {
     Single(Scent),
     Sequence(Vec<Step>),
     Repetition(Pattern),
-    Item(&'static str, &'static Game),
+    Item(&'static str, Box<Game>),
 }
 
 impl From<Branch> for Vec<Branch> {
@@ -63,7 +63,7 @@ pub enum Step {
     Single(Scent),
     Union(Vec<Branch>),
     Repetition(Pattern),
-    Item(&'static str, &'static Game),
+    Item(&'static str, Box<Game>),
 }
 
 impl From<Game> for Step {
@@ -83,7 +83,7 @@ pub enum Pattern {
     Single(Scent),
     Union(Vec<Branch>),
     Sequence(Vec<Step>),
-    Item(&'static str, &'static Game),
+    Item(&'static str, Box<Game>),
 }
 
 impl From<Game> for Pattern {
@@ -116,7 +116,7 @@ pub enum Game {
     /// Matches are attempted starting with 0 repetitions (an empty slice) and incrementing as high as possible.
     Repetition(Pattern),
     /// Matches the given `Game` that is associated with the given `&str`
-    Item(&'static str, &'static Game),
+    Item(&'static str, Box<Game>),
 }
 
 impl Game {
@@ -380,7 +380,7 @@ fn hunt<'l, 'c>(
             }
         }
         Game::Item(id, game) => {
-            let item_finishes = hunt(game.clone(), start.clone(), captures);
+            let item_finishes = hunt(*game.clone(), start.clone(), captures);
 
             // TODO: Determine how to handle the possibility of multiple matches with id.
             if captures

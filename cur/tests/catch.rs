@@ -27,7 +27,7 @@ fn non_item() {
 
 #[test]
 fn single_item() {
-    let cur = Cur::new(Game::Item("id", &Game::Single(Scent::Char('a'))));
+    let cur = Cur::new(Game::Item("id", Box::new(Game::Single(Scent::Char('a')))));
 
     assert_catch!(cur; "a"; 0, 1, "a"; "id"=> 0, 1, "a");
 }
@@ -35,7 +35,7 @@ fn single_item() {
 #[test]
 fn inner_item() {
     let cur = Cur::new(Game::Sequence(vec![
-        Step::Item("id", &Game::Single(Scent::Char('a'))),
+        Step::Item("id", Box::new(Game::Single(Scent::Char('a')))),
         Step::Single(Scent::Char('b')),
     ]));
 

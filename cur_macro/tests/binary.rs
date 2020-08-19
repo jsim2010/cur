@@ -60,7 +60,7 @@ fn multiple_sequence() {
 
 /// `A + B | C is replaced by a `Game::Union`.
 #[test]
-fn union_over_sequence() {
+fn sequence_before_union() {
     game!(UNION = 'a' + 'b' | 'c');
 
     assert_eq!(
@@ -77,7 +77,7 @@ fn union_over_sequence() {
 
 /// `A + (B | C)` is replaced by a `Game::Sequence`.
 #[test]
-fn sequence_over_union() {
+fn union_before_sequence() {
     game!(SEQUENCE = 'a' + ('b' | 'c'));
 
     assert_eq!(

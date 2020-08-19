@@ -126,7 +126,7 @@ impl ToTokens for GameExpr {
             }
             Self::Item(name, game) => {
                 quote! {
-                    Game::Item(#name, &#game)
+                    Game::Item(#name, Box::new(#game))
                 }
             }
             Self::Repetition(pattern) => {

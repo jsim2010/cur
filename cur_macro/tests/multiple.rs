@@ -82,3 +82,13 @@ fn path() {
         ])
     );
 }
+
+#[test]
+fn name() {
+    game!(MYDIGIT = DIGIT: mine);
+
+    assert_eq!(
+        *MYDIGIT,
+        Game::Item("mine", Box::new(Game::Single(Scent::Range('0', '9')))),
+    );
+}

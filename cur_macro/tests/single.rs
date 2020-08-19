@@ -99,5 +99,5 @@ fn range_inclusvie() {
 fn type_expr() {
     game!(TYPE = 'a': id);
 
-    assert_eq!(*TYPE, Game::Item("id", &Game::Single(Scent::Char('a'))));
+    assert_eq!(*TYPE, Game::Item("id", Box::new(Game::Single(Scent::Char('a')))));
 }
