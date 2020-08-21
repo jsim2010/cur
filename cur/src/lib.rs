@@ -8,7 +8,7 @@ pub use {cur_macro::game, once_cell::sync::Lazy};
 use {
     alloc::{boxed::Box, collections::BTreeMap, vec, vec::Vec},
     core::{
-        ops::{Add, BitOr, Range},
+        ops::{Add, BitOr, Range, Not},
         str::Chars,
     },
 };
@@ -130,6 +130,16 @@ impl Game {
         }
     }
 
+    fn pattern(self) -> Pattern {
+        match self {
+            Self::Single(scent) => Pattern::Single(scent),
+            Self::Union(branches) => Pattern::Union(branches),
+            Self::Sequence(steps) => Pattern::Sequence(steps),
+            Self::Repetition(pattern) => pattern,
+            Self::Item(name, game) => Pattern::Item(name, game),
+        }
+    }
+
     fn steps(self) -> Vec<Step> {
         match self {
             Self::Single(scent) => vec![Step::Single(scent)],
@@ -158,6 +168,14 @@ impl BitOr for Game {
         let mut branches = self.branches();
         branches.append(&mut rhs.branches());
         Self::Union(branches)
+    }
+}
+
+impl Not for Game {
+    type Output = Game;
+
+    fn not(self) -> Self::Output {
+        Self::Repetition(self.pattern())
     }
 }
 

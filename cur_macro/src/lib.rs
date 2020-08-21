@@ -67,24 +67,43 @@ impl Parse for Input {
 /// Maps to [`Game`] expressions.
 #[derive(Clone, Debug)]
 enum GameExpr {
+    Empty,
     Single(ScentExpr),
     Sequence(Vec<GameExpr>),
-    Union(Vec<GameExpr>),
-    Repetition(PatternExpr),
+    Union {
+        left: Box<GameExpr>,
+        right: Box<GameExpr>,
+    },
+    Repetition(Box<GameExpr>),
     Path(Path),
     Item(Box<str>, Box<GameExpr>),
 }
 
 impl GameExpr {
-    fn branches(&self) -> Vec<Self> {
-        match self.clone() {
-            GameExpr::Sequence(steps) => vec![GameExpr::Sequence(steps)],
-            GameExpr::Union(branches) => branches,
-            GameExpr::Single(scent) => vec![GameExpr::Single(scent)],
-            GameExpr::Repetition(pattern) => vec![GameExpr::Repetition(pattern)],
-            GameExpr::Path(path) => vec![GameExpr::Path(path)],
-            GameExpr::Item(name, g) => vec![GameExpr::Item(name, g)],
+    fn option(self) -> Self {
+        Self::Union {
+            left: Box::new(Self::Empty),
+            right: Box::new(self),
         }
+    }
+
+    /// Repeats `self` as specified by `quantifier`.
+    fn repeat(self, quantifier: &Quantifier) -> GameExpr {
+        let mut concatenation = Vec::new();
+
+        for _ in 0..quantifier.minimum {
+            concatenation.push(self.clone());
+        }
+
+        if quantifier.maximum == usize::max_value() {
+            concatenation.push(GameExpr::Repetition(Box::new(self)));
+        } else {
+            for _ in quantifier.minimum..quantifier.maximum {
+                concatenation.push(self.clone().option());
+            }
+        }
+
+        GameExpr::Sequence(concatenation)
     }
 }
 
@@ -103,13 +122,19 @@ impl From<ScentExpr> for GameExpr {
 impl ToTokens for GameExpr {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         tokens.extend(match self {
+            Self::Empty => {
+                quote! {
+                    Game::Sequence(vec![])
+                }
+            }
             Self::Single(scent) => {
                 quote! {
                     Game::Single(#scent)
                 }
             }
+            #[allow(clippy::integer_arithmetic)] // Add impl is safe for Game.
             Self::Sequence(steps) => {
-                if steps.len() == 0 {
+                if steps.is_empty() {
                     quote! {
                         Game::Sequence(vec![])
                     }
@@ -119,9 +144,10 @@ impl ToTokens for GameExpr {
                     }
                 }
             }
-            Self::Union(branches) => {
+            #[allow(clippy::integer_arithmetic)] // BitOr impl is safe for Game.
+            Self::Union {left, right} => {
                 quote! {
-                    (#(#branches)|*)
+                    (#left | #right)
                 }
             }
             Self::Item(name, game) => {
@@ -131,7 +157,7 @@ impl ToTokens for GameExpr {
             }
             Self::Repetition(pattern) => {
                 quote! {
-                    Game::Repetition(#pattern)
+                    !(#pattern)
                 }
             }
             Self::Path(path) => {
@@ -200,10 +226,12 @@ impl TryFrom<ExprBinary> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprBinary) -> Result<Self, Self::Error> {
-        let games = vec![(*value.left).try_into()?, (*value.right).try_into()?];
+        let left: Self = (*value.left).try_into()?;
+        let right: Self = (*value.right).try_into()?;
+        let games = vec![left.clone(), right.clone()];
 
         match value.op {
-            BinOp::BitOr(..) => Ok(Self::Union(games)),
+            BinOp::BitOr(..) => Ok(Self::Union{left: Box::new(left), right: Box::new(right)}),
             BinOp::Add(..) => Ok(Self::Sequence(games)),
             BinOp::BitAnd(..)
             | BinOp::Sub(..)
@@ -244,7 +272,7 @@ impl TryFrom<ExprPath> for GameExpr {
     fn try_from(value: ExprPath) -> Result<Self, Self::Error> {
         if let Some(ident) = value.path.get_ident() {
             if ident.to_string().as_str() == "None" {
-                return Ok(Self::Sequence(vec![]));
+                return Ok(Self::Empty);
             }
         }
 
@@ -267,7 +295,7 @@ impl TryFrom<ExprRange> for GameExpr {
                 if end_code == FIRST_CHAR_VALUE_AFTER_SURROGATES {
                     LAST_CHAR_BEFORE_SURROGATES
                 } else {
-                    char::try_from(end_code - 1)
+                    char::try_from(end_code.checked_sub(1).ok_or_else(|| Error::new_spanned(to.clone(), "End bound cannot be exclusive 0"))?)
                         .map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
                 }
             } else {
@@ -291,8 +319,8 @@ impl TryFrom<ExprRepeat> for GameExpr {
     type Error = Error;
 
     fn try_from(repeat: ExprRepeat) -> Result<Self, Self::Error> {
-        let repeater = GameRepeater::try_from(*repeat.len)?;
-        Ok(PatternExpr::from(GameExpr::try_from(*repeat.expr)?).repeat(&repeater))
+        let repeater = Quantifier::try_from(*repeat.len)?;
+        Ok(Self::try_from(*repeat.expr)?.repeat(&repeater))
     }
 }
 
@@ -300,10 +328,7 @@ impl TryFrom<ExprTry> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprTry) -> Result<Self, Self::Error> {
-        let optional_game = Self::try_from(*value.expr)?;
-        let mut branches = vec![GameExpr::Sequence(vec![])];
-        branches.append(&mut optional_game.branches());
-        Ok(Self::Union(branches))
+        Self::try_from(*value.expr).map(Self::option)
     }
 }
 
@@ -332,7 +357,7 @@ impl TryFrom<ExprType> for GameExpr {
             | Type::Verbatim(..)
             | Type::__Nonexhaustive => Err(Error::new_spanned(value.ty, "expected path")),
         }?;
-        Self::try_from(*value.expr).map(|game| GameExpr::Item(id, Box::new(game)))
+        Self::try_from(*value.expr).map(|game| Self::Item(id, Box::new(game)))
     }
 }
 
@@ -342,11 +367,11 @@ impl TryFrom<Lit> for GameExpr {
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
         match value {
             Lit::Char(c) => Ok(c.value().into()),
-            Lit::Str(s) => Ok(GameExpr::Sequence(
+            Lit::Str(s) => Ok(Self::Sequence(
                 s.value()
                     .chars()
                     .map(|c| c.into())
-                    .collect::<Vec<GameExpr>>(),
+                    .collect::<Vec<Self>>(),
             )),
             Lit::ByteStr(..)
             | Lit::Byte(..)
@@ -361,111 +386,9 @@ impl TryFrom<Lit> for GameExpr {
     }
 }
 
-#[derive(Clone, Debug)]
-enum PatternExpr {
-    Single(ScentExpr),
-    Sequence(Vec<GameExpr>),
-    Union(Vec<GameExpr>),
-    Path(Path),
-    Item(Box<str>, Box<GameExpr>),
-}
-
-impl PatternExpr {
-    fn branches(&self) -> Vec<GameExpr> {
-        match self.clone() {
-            PatternExpr::Sequence(steps) => vec![GameExpr::Sequence(steps)],
-            PatternExpr::Union(branches) => branches,
-            PatternExpr::Single(scent) => vec![GameExpr::Single(scent)],
-            PatternExpr::Path(path) => vec![GameExpr::Path(path)],
-            PatternExpr::Item(name, g) => vec![GameExpr::Item(name, g)],
-        }
-    }
-
-    fn steps(&self) -> Vec<GameExpr> {
-        match self.clone() {
-            PatternExpr::Single(scent) => vec![GameExpr::Single(scent)],
-            PatternExpr::Sequence(steps) => steps,
-            PatternExpr::Union(branches) => vec![GameExpr::Union(branches)],
-            PatternExpr::Path(path) => vec![GameExpr::Path(path)],
-            PatternExpr::Item(name, game) => vec![GameExpr::Item(name, game)],
-        }
-    }
-
-    fn repeat(self, repeater: &GameRepeater) -> GameExpr {
-        let mut concatenation = Vec::new();
-
-        for _ in 0..repeater.minimum {
-            concatenation.extend(self.steps());
-        }
-
-        if repeater.maximum == usize::max_value() {
-            concatenation.push(GameExpr::Repetition(self.clone().into()));
-        } else {
-            for _ in repeater.minimum..repeater.maximum {
-                let mut branches = vec![GameExpr::Sequence(vec![])];
-                branches.append(&mut self.branches());
-                concatenation.push(GameExpr::Union(branches))
-            }
-        }
-
-        GameExpr::Sequence(concatenation)
-    }
-}
-
-impl From<GameExpr> for PatternExpr {
-    fn from(game: GameExpr) -> Self {
-        match game {
-            GameExpr::Single(scent) => Self::Single(scent),
-            GameExpr::Repetition(pattern) => pattern,
-            GameExpr::Sequence(steps) => Self::Sequence(steps),
-            GameExpr::Union(branches) => Self::Union(branches),
-            GameExpr::Path(path) => Self::Path(path),
-            GameExpr::Item(name, g) => Self::Item(name, g),
-        }
-    }
-}
-
-impl ToTokens for PatternExpr {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        tokens.extend(match self {
-            Self::Single(scent) => {
-                quote! {
-                    Pattern::Single(#scent)
-                }
-            }
-            Self::Sequence(steps) => {
-                if steps.len() == 0 {
-                    quote! {
-                        Pattern::Sequence(vec![])
-                    }
-                } else {
-                    quote! {
-                        Pattern::Sequence(vec![#(Step::from(#steps)),*])
-                    }
-                }
-            }
-            Self::Union(branches) => {
-                quote! {
-                    Pattern::Union(vec![#(#branches),*])
-                }
-            }
-            Self::Path(path) => {
-                quote! {
-                    Pattern::from(#path.clone())
-                }
-            }
-            Self::Item(name, game) => {
-                quote! {
-                    Pattern::Item(#name, #game)
-                }
-            }
-        });
-    }
-}
-
 /// Signifies the number of times a [`GameExpr`] can be repeated.
 #[derive(Debug)]
-struct GameRepeater {
+struct Quantifier {
     /// The smallest number of repeats.
     minimum: usize,
     /// The largest number of repeats.
@@ -475,7 +398,7 @@ struct GameRepeater {
     maximum: usize,
 }
 
-impl TryFrom<Expr> for GameRepeater {
+impl TryFrom<Expr> for Quantifier {
     type Error = Error;
 
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
@@ -525,7 +448,7 @@ impl TryFrom<Expr> for GameRepeater {
     }
 }
 
-impl TryFrom<ExprRange> for GameRepeater {
+impl TryFrom<ExprRange> for Quantifier {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
@@ -547,7 +470,7 @@ impl TryFrom<ExprRange> for GameRepeater {
     }
 }
 
-impl TryFrom<Lit> for GameRepeater {
+impl TryFrom<Lit> for Quantifier {
     type Error = Error;
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
