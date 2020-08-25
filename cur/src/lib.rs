@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-pub use {cur_macro::game, once_cell::sync::Lazy};
+pub use {cur_internal::Scent, cur_macro::game, once_cell::sync::Lazy};
 
 use {
     alloc::{boxed::Box, collections::BTreeMap, vec, vec::Vec},
@@ -12,25 +12,6 @@ use {
         str::Chars,
     },
 };
-
-/// Signifies a desired `char`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Scent {
-    /// Matches a single `char` equal to the one given.
-    Char(char),
-    /// Matches a single `char` equal to or in between the two given.
-    Range(char, char),
-}
-
-impl Scent {
-    /// Returns if `self` matches `ch`.
-    fn is_match(&self, ch: char) -> bool {
-        match *self {
-            Self::Char(c) => c == ch,
-            Self::Range(begin, end) => (begin..=end).contains(&ch),
-        }
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Branch {

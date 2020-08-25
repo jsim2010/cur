@@ -2,4 +2,5 @@
 members = [
     "cur",
     "cur_macro",
+    "cur_internal",
 ]
