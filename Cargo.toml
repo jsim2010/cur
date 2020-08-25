@@ -1,6 +1,22 @@
+[package]
+name = "cur"
+version = "0.2.0"
+authors = ["Justin Simerly <justinsimerly1992@gmail.com>"]
+edition = "2018"
+description = "The tool that will hunt for your regular expression."
+license = "MIT"
+repository = "https://github.com/jsim2010/cur"
+readme = "README.md"
+keywords = ["regular", "expression", "hunt"]
+categories = ["text-processing", "no-std"]
+
+[dependencies]
+cur_internal = { path = "cur_internal" }
+cur_macro = { path = "cur_macro" }
+once_cell = "1.4.0"
+
 [workspace]
 members = [
-    "cur",
-    "cur_macro",
     "cur_internal",
+    "cur_macro",
 ]

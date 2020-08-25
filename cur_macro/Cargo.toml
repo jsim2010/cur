@@ -19,7 +19,7 @@ quote = "1.0.0"
 syn = { version = "1.0.0", features = ["full", "extra-traits"] }
 
 [dev-dependencies]
-cur = { path = "../cur" }
+cur = { path = ".." }
 
 [lib]
 proc-macro = true
