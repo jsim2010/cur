@@ -3,18 +3,19 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
-use core::convert::{TryFrom, TryInto};
-use proc_macro::TokenStream;
-use proc_macro2::TokenStream as TokenStream2;
-use quote::{quote, ToTokens};
-use syn::{
-    parse::{Parse, ParseStream, Result as ParseResult},
-    parse_macro_input, Type,
-};
-use syn::{
-    BinOp, Error, Expr, ExprAssign, ExprBinary, ExprPath, ExprRange, ExprRepeat, ExprTry, ExprType,
-    Lit, Path, RangeLimits, Visibility,
+use {
+    alloc::{boxed::Box, string::ToString, vec::Vec},
+    core::convert::{TryFrom, TryInto},
+    cur_internal::Scent,
+    proc_macro::TokenStream,
+    proc_macro2::TokenStream as TokenStream2,
+    quote::{quote, ToTokens},
+    syn::{
+        parse::{Parse, ParseStream, Result as ParseResult},
+        parse_macro_input, Type,
+        BinOp, Error, Expr, ExprAssign, ExprBinary, ExprPath, ExprRange, ExprRepeat, ExprTry, ExprType,
+        Lit, Path, RangeLimits, Visibility,
+    },
 };
 
 const FIRST_CHAR_VALUE_AFTER_SURROGATES: u32 = 0xe000;
@@ -64,16 +65,36 @@ impl Parse for Input {
     }
 }
 
+#[derive(Clone, Debug)]
+enum GameOp {
+    Or,
+    And,
+}
+
+impl ToTokens for GameOp {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Or => {
+                quote! {|}
+            }
+            Self::And => {
+                quote! {+}
+            }
+        });
+    }
+}
+
 /// Maps to [`Game`] expressions.
 #[derive(Clone, Debug)]
 enum GameExpr {
     Empty,
-    Single(ScentExpr),
-    Sequence(Vec<GameExpr>),
-    Union {
+    Single(Scent),
+    Binary {
+        op: GameOp,
         left: Box<GameExpr>,
         right: Box<GameExpr>,
     },
+    Sequence(Vec<GameExpr>),
     Repetition(Box<GameExpr>),
     Path(Path),
     Item(Box<str>, Box<GameExpr>),
@@ -81,9 +102,10 @@ enum GameExpr {
 
 impl GameExpr {
     fn option(self) -> Self {
-        Self::Union {
+        Self::Binary {
             left: Box::new(Self::Empty),
             right: Box::new(self),
+            op: GameOp::Or,
         }
     }
 
@@ -109,12 +131,25 @@ impl GameExpr {
 
 impl From<char> for GameExpr {
     fn from(value: char) -> Self {
-        ScentExpr::from(value).into()
+        Scent::from(value).into()
     }
 }
 
-impl From<ScentExpr> for GameExpr {
-    fn from(value: ScentExpr) -> Self {
+impl From<ExprPath> for GameExpr {
+    fn from(expr: ExprPath) -> Self {
+        if let Some(ident) = expr.path.get_ident() {
+            if ident.to_string().as_str() == "None" {
+                return Self::Empty;
+            }
+        }
+
+        // Assume path is valid.
+        Self::Path(expr.path)
+    }
+}
+
+impl From<Scent> for GameExpr {
+    fn from(value: Scent) -> Self {
         Self::Single(value)
     }
 }
@@ -144,10 +179,9 @@ impl ToTokens for GameExpr {
                     }
                 }
             }
-            #[allow(clippy::integer_arithmetic)] // BitOr impl is safe for Game.
-            Self::Union {left, right} => {
+            Self::Binary {left, right, op} => {
                 quote! {
-                    (#left | #right)
+                    (#left #op #right)
                 }
             }
             Self::Item(name, game) => {
@@ -157,7 +191,7 @@ impl ToTokens for GameExpr {
             }
             Self::Repetition(pattern) => {
                 quote! {
-                    !(#pattern)
+                    #pattern.repeat()
                 }
             }
             Self::Path(path) => {
@@ -175,7 +209,7 @@ impl TryFrom<Expr> for GameExpr {
     fn try_from(value: Expr) -> Result<Self, Self::Error> {
         match value {
             Expr::Binary(binary) => binary.try_into(),
-            Expr::Path(path) => path.try_into(),
+            Expr::Path(path) => Ok(path.into()),
             Expr::Lit(literal) => literal.lit.try_into(),
             Expr::Paren(paren) => (*paren.expr).try_into(),
             Expr::Try(try_expr) => try_expr.try_into(),
@@ -226,13 +260,9 @@ impl TryFrom<ExprBinary> for GameExpr {
     type Error = Error;
 
     fn try_from(value: ExprBinary) -> Result<Self, Self::Error> {
-        let left: Self = (*value.left).try_into()?;
-        let right: Self = (*value.right).try_into()?;
-        let games = vec![left.clone(), right.clone()];
-
         match value.op {
-            BinOp::BitOr(..) => Ok(Self::Union{left: Box::new(left), right: Box::new(right)}),
-            BinOp::Add(..) => Ok(Self::Sequence(games)),
+            BinOp::BitOr(..) => Ok(GameOp::Or),
+            BinOp::Add(..) => Ok(GameOp::And),
             BinOp::BitAnd(..)
             | BinOp::Sub(..)
             | BinOp::Mul(..)
@@ -262,22 +292,7 @@ impl TryFrom<ExprBinary> for GameExpr {
                 value.op,
                 "invalid binary operation; expected `|` or `+`",
             )),
-        }
-    }
-}
-
-impl TryFrom<ExprPath> for GameExpr {
-    type Error = Error;
-
-    fn try_from(value: ExprPath) -> Result<Self, Self::Error> {
-        if let Some(ident) = value.path.get_ident() {
-            if ident.to_string().as_str() == "None" {
-                return Ok(Self::Empty);
-            }
-        }
-
-        // Assume path is valid.
-        Ok(Self::Path(value.path))
+        }.and_then(|op| Ok(Self::Binary{left: Box::new((*value.left).try_into()?), right: Box::new((*value.right).try_into()?), op}))
     }
 }
 
@@ -305,7 +320,7 @@ impl TryFrom<ExprRange> for GameExpr {
             '\u{10ffff}'
         };
 
-        Ok(ScentExpr::Range(
+        Ok(Scent::Range(
             range
                 .from
                 .map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?,
@@ -478,40 +493,6 @@ impl TryFrom<Lit> for Quantifier {
             minimum,
             maximum: 0,
         })
-    }
-}
-
-// Cannot use cur::Scent because adding cur as a dependency would be circular.
-// TODO: Should combine Scent and ScentExpr and move to a separate dependency that both cur and cur_macro use.
-/// Maps to [`Scent`] expressions.
-#[derive(Clone, Debug)]
-enum ScentExpr {
-    /// Maps to [`Scent::Char`].
-    Char(char),
-    /// Maps to [`Scent::Range`].
-    Range(char, char),
-}
-
-impl From<char> for ScentExpr {
-    fn from(value: char) -> Self {
-        Self::Char(value)
-    }
-}
-
-impl ToTokens for ScentExpr {
-    fn to_tokens(&self, tokens: &mut TokenStream2) {
-        tokens.extend(match self {
-            Self::Char(c) => {
-                quote! {
-                    Scent::Char(#c)
-                }
-            }
-            Self::Range(start, end) => {
-                quote! {
-                    Scent::Range(#start, #end)
-                }
-            }
-        });
     }
 }
 
