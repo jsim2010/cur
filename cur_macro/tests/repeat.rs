@@ -250,7 +250,7 @@ fn repeat_union() {
 /// Add with Index.
 #[test]
 fn repeat_sequence() {
-    game!(REPEAT_SEQUENCE = ['a' + 'b'; 1..]);
+    game!(REPEAT_SEQUENCE = [['a', 'b']; 1..]);
 
     assert_eq!(
         *REPEAT_SEQUENCE,

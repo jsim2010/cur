@@ -39,6 +39,22 @@ fn string() {
     );
 }
 
+/// A byte is replaced by a matching `Game::Single`.
+#[test]
+fn byte() {
+    game!(BYTE = b'0');
+
+    assert_eq!(*BYTE, Game::Single(Scent::Char('0')));
+}
+
+/// A byte string is replaced by a `Game::Sequence`.
+#[test]
+fn byte_string() {
+    game!(BYTE_STR = b"test");
+
+    assert_eq!(*BYTE_STR, Game::Sequence(vec![Step::Single(Scent::Char('t')), Step::Single(Scent::Char('e')), Step::Single(Scent::Char('s')), Step::Single(Scent::Char('t'))]));
+}
+
 /// A parenthesis around a single `Game` is replaced by the `Game`.
 #[test]
 fn parenthesis() {
@@ -99,5 +115,8 @@ fn range_inclusvie() {
 fn type_expr() {
     game!(TYPE = 'a': id);
 
-    assert_eq!(*TYPE, Game::Item("id", Box::new(Game::Single(Scent::Char('a')))));
+    assert_eq!(
+        *TYPE,
+        Game::Item("id", Box::new(Game::Single(Scent::Char('a'))))
+    );
 }

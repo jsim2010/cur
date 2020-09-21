@@ -67,7 +67,7 @@ lint: _install_lint
      -D missing_doc_code_examples \
      -D non_ascii_idents \
      -D private_doc_tests \
-     -D single_use_lifetimes \
+     -A single_use_lifetimes \
      -D trivial_casts \
      -D trivial_numeric_casts \
      -D unreachable_pub \
@@ -104,10 +104,10 @@ set_rust version:
 
 # Runs tests
 test:
-    cargo test --verbose --all-features
+    cargo test --workspace --verbose --all-features
 
 # Validates the project
-validate: (set_rust "1.44.0") validate_format validate_deps lint build test
+validate: (set_rust "1.46.0") validate_format validate_deps lint build test
 
 # Validates dependencies of the project
 validate_deps: _install_deps

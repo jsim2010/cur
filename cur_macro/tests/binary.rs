@@ -29,10 +29,10 @@ fn multiple_union() {
     );
 }
 
-/// `A + B` is replaced by a `Game::Sequence`.
+/// `[A, B]` is replaced by a `Game::Sequence`.
 #[test]
 fn sequence() {
-    game!(SEQUENCE = 'a' + 'b');
+    game!(SEQUENCE = ['a', 'b']);
 
     assert_eq!(
         *SEQUENCE,
@@ -43,10 +43,10 @@ fn sequence() {
     );
 }
 
-/// `A + B + C` is replaced by a single `Game::Sequence`.
+/// `[A, B, C]` is replaced by a single `Game::Sequence`.
 #[test]
 fn multiple_sequence() {
-    game!(MULTIPLE_SEQUENCE = 'a' + 'b' + 'c');
+    game!(MULTIPLE_SEQUENCE = ['a', 'b', 'c']);
 
     assert_eq!(
         *MULTIPLE_SEQUENCE,
@@ -58,10 +58,10 @@ fn multiple_sequence() {
     );
 }
 
-/// `A + B | C is replaced by a `Game::Union`.
+/// `[A, B] | C is replaced by a `Game::Union`.
 #[test]
 fn sequence_before_union() {
-    game!(UNION = 'a' + 'b' | 'c');
+    game!(UNION = ['a', 'b'] | 'c');
 
     assert_eq!(
         *UNION,
@@ -75,10 +75,10 @@ fn sequence_before_union() {
     );
 }
 
-/// `A + (B | C)` is replaced by a `Game::Sequence`.
+/// `[A, B | C]` is replaced by a `Game::Sequence`.
 #[test]
 fn union_before_sequence() {
-    game!(SEQUENCE = 'a' + ('b' | 'c'));
+    game!(SEQUENCE = ['a', 'b' | 'c']);
 
     assert_eq!(
         *SEQUENCE,

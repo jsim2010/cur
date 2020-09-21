@@ -3,7 +3,7 @@
 
 extern crate alloc;
 
-pub use {cur_internal::Scent, cur_macro::game, once_cell::sync::Lazy};
+pub use {cur_macro::game, once_cell::sync::Lazy};
 
 use {
     alloc::{boxed::Box, collections::BTreeMap, vec, vec::Vec},
@@ -13,11 +13,44 @@ use {
     },
 };
 
+/// Signifies a desired `char`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Scent {
+    /// Matches a single `char` equal to the one given.
+    Char(char),
+    /// Matches a single `char` equal to or in between the two given.
+    Range(char, char),
+}
+
+impl Scent {
+    /// Returns if `self` matches `ch`.
+    #[inline]
+    #[must_use]
+    pub fn is_match(&self, ch: char) -> bool {
+        match *self {
+            Self::Char(c) => c == ch,
+            Self::Range(begin, end) => (begin..=end).contains(&ch),
+        }
+    }
+}
+
+impl From<char> for Scent {
+    #[inline]
+    fn from(c: char) -> Self {
+        Self::Char(c)
+    }
+}
+
+/// A game that is part of a union.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Branch {
+    /// A single scent.
     Single(Scent),
+    /// A sequence.
     Sequence(Vec<Step>),
+    /// A repeated game.
     Repetition(Pattern),
+    /// A named game.
     Item(&'static str, Box<Game>),
 }
 
@@ -39,31 +72,42 @@ impl From<Game> for Vec<Branch> {
     }
 }
 
+/// A game that is part of a sequence.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
+    /// A single scent.
     Single(Scent),
+    /// A union.
     Union(Vec<Branch>),
+    /// A repeated game.
     Repetition(Pattern),
+    /// A named game.
     Item(&'static str, Box<Game>),
 }
 
-impl From<Game> for Step {
+// TODO: Is this needed instead of using steps().
+impl From<Game> for Vec<Step> {
     fn from(game: Game) -> Self {
         match game {
-            Game::Single(scent) => Self::Single(scent),
-            Game::Union(branches) => Self::Union(branches),
-            Game::Sequence(steps) => steps[0].clone(),
-            Game::Repetition(pattern) => Self::Repetition(pattern),
-            Game::Item(name, g) => Self::Item(name, g),
+            Game::Single(scent) => vec![Step::Single(scent)],
+            Game::Union(branches) => vec![Step::Union(branches)],
+            Game::Sequence(steps) => steps,
+            Game::Repetition(pattern) => vec![Step::Repetition(pattern)],
+            Game::Item(name, g) => vec![Step::Item(name, g)],
         }
     }
 }
 
+/// A game to repeat any number of times.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pattern {
+    /// A scent.
     Single(Scent),
+    /// A union.
     Union(Vec<Branch>),
+    /// A sequence.
     Sequence(Vec<Step>),
+    /// A named game.
     Item(&'static str, Box<Game>),
 }
 
@@ -121,6 +165,7 @@ impl Game {
         }
     }
 
+    /// Returns a repetition of `self`.
     pub fn repeat(self) -> Self {
         Self::Repetition(self.pattern())
     }
@@ -153,6 +198,18 @@ impl BitOr for Game {
         let mut branches = self.branches();
         branches.append(&mut rhs.branches());
         Self::Union(branches)
+    }
+}
+
+impl From<char> for Game {
+    fn from(c: char) -> Self {
+        Game::Single(Scent::Char(c))
+    }
+}
+
+impl From<u8> for Game {
+    fn from(value: u8) -> Self {
+        Game::from(char::from(value))
     }
 }
 
@@ -259,17 +316,22 @@ impl<'l> Find<'l> {
     }
 
     /// Returns the first index of the match.
+    #[inline]
+    #[must_use]
     pub const fn start(&self) -> usize {
         self.start
     }
 
     /// Returns the first index after the match.
+    #[inline]
+    #[must_use]
     pub const fn finish(&self) -> usize {
         self.finish
     }
 }
 
 impl<'l> AsRef<str> for Find<'l> {
+    #[inline]
     fn as_ref(&self) -> &str {
         self.text
     }
@@ -296,21 +358,29 @@ impl<'l, 'c> Catch<'l, 'c> {
     }
 
     /// Returns the first index of the match with [`Game`].
+    #[inline]
+    #[must_use]
     pub const fn start(&self) -> usize {
         self.find.start()
     }
 
     /// Returns the first index after the match with [`Game`].
+    #[inline]
+    #[must_use]
     pub const fn finish(&self) -> usize {
         self.find.finish()
     }
 
     /// Returns the [`&str`] that matched the [`Game`].
+    #[inline]
+    #[must_use]
     pub fn as_str(&self) -> &str {
         self.find.as_ref()
     }
 
     /// Returns the list of [`Find`]s identified by `id`.
+    #[inline]
+    #[must_use]
     pub fn get(&self, id: &str) -> Option<Vec<Find<'l>>> {
         self.captures.get(id).cloned()
     }
@@ -345,7 +415,7 @@ fn hunt<'l, 'c>(
         Game::Sequence(elements) => {
             finishes.push(start);
 
-            for element in elements.iter() {
+            for element in &elements {
                 // Reset finishes with each iteration because all elements of a sequence must match.
                 let new_starts: Vec<Spot<'l>> = finishes.drain(..).collect();
 
@@ -375,7 +445,7 @@ fn hunt<'l, 'c>(
             }
         }
         Game::Item(id, game) => {
-            let item_finishes = hunt(*game.clone(), start.clone(), captures);
+            let item_finishes = hunt(*game, start.clone(), captures);
 
             // TODO: Determine how to handle the possibility of multiple matches with id.
             if captures
@@ -407,19 +477,25 @@ pub struct Cur {
 
 impl Cur {
     /// Creates a [`Cur`] that will hunt for `game`.
+    #[inline]
+    #[must_use]
     pub const fn new(game: Game) -> Self {
         Self { game }
     }
 
     /// Returns if `land` matches the [`Game`] `self` is hunting.
+    #[inline]
+    #[must_use]
     pub fn is_game(&self, land: &str) -> bool {
         hunt(self.game.clone(), Spot::from(land), &mut Captures::new())
-            .any(|finish| finish.is_end())
+            .any(Spot::is_end)
     }
 
     /// Returns the first [`Find`] that matches the [`Game`] `self` is hunting starting from each consecutive [`Spot`] of `land`.
     ///
     /// [`None`] indicates the [`Game`] cannot be detected starting from any index in `land`.
+    #[inline]
+    #[must_use]
     pub fn find<'l>(&self, land: &'l str) -> Option<Find<'l>> {
         self.catch(land).map(|catch| catch.find)
     }
@@ -427,6 +503,8 @@ impl Cur {
     /// Returns the first [`Catch`] that matches the [`Game`] of `self` starting from each consecutive [`Spot`] of `land`.
     ///
     /// [`None`] indicates the [`Game`] does not match starting from any index in `land`.
+    #[inline]
+    #[must_use]
     pub fn catch<'l, 'c>(&self, land: &'l str) -> Option<Catch<'l, 'c>> {
         let mut start = Spot::from(land);
         let mut captures = Captures::new();
@@ -447,6 +525,8 @@ impl Cur {
     /// Returns the first [`Find`] that matches the [`Game`] associated with the `name`.
     ///
     /// [`None`] indicates the [`Game`] does not match `land`.
+    #[inline]
+    #[must_use]
     pub fn grab<'l>(&self, land: &'l str, name: &str) -> Option<Find<'l>> {
         self.catch(land)
             .and_then(|catch| catch.get(name))
