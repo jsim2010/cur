@@ -44,10 +44,10 @@ fn union_with_try() {
     );
 }
 
-/// `(A + B)?` is replaced by a `Game::Union`.
+/// `[A, B]?` is replaced by a `Game::Union`.
 #[test]
 fn try_sequence() {
-    game!(TRY_SEQUENCE = ('a' + 'b')?);
+    game!(TRY_SEQUENCE = ['a', 'b']?);
 
     assert_eq!(
         *TRY_SEQUENCE,
@@ -61,10 +61,10 @@ fn try_sequence() {
     );
 }
 
-/// `A + B?` is replaced by a `Game::Sequence`.
+/// `[A, B?]` is replaced by a `Game::Sequence`.
 #[test]
 fn sequence_with_try() {
-    game!(SEQUENCE_WITH_TRY = 'a' + 'b'?);
+    game!(SEQUENCE_WITH_TRY = ['a', 'b'?]);
 
     assert_eq!(
         *SEQUENCE_WITH_TRY,

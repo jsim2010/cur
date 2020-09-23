@@ -33,7 +33,7 @@ fn union() {
 /// A sequence.
 #[test]
 fn sequence() {
-    game!(DIGIT_AND_A = DIGIT + 'a');
+    game!(DIGIT_AND_A = [DIGIT, 'a']);
 
     assert_eq!(
         *DIGIT_AND_A,

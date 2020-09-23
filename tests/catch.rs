@@ -20,24 +20,27 @@ macro_rules! assert_catch {
 
 #[test]
 fn non_item() {
-    let cur = Cur::new(Game::Single(Scent::Char('a')));
+    let game = Game::Single(Scent::Char('a'));
+    let cur = Cur::new(&game);
 
     assert_catch!(cur; "a"; 0, 1, "a");
 }
 
 #[test]
 fn single_item() {
-    let cur = Cur::new(Game::Item("id", Box::new(Game::Single(Scent::Char('a')))));
+    let game = Game::Item("id", Box::new(Game::Single(Scent::Char('a'))));
+    let cur = Cur::new(&game);
 
     assert_catch!(cur; "a"; 0, 1, "a"; "id"=> 0, 1, "a");
 }
 
 #[test]
 fn inner_item() {
-    let cur = Cur::new(Game::Sequence(vec![
+    let game = Game::Sequence(vec![
         Step::Item("id", Box::new(Game::Single(Scent::Char('a')))),
         Step::Single(Scent::Char('b')),
-    ]));
+    ]);
+    let cur = Cur::new(&game);
 
     assert_catch!(cur; "ab"; 0, 2, "ab"; "id"=> 0, 1, "a");
 }

@@ -14,7 +14,8 @@ macro_rules! assert_find {
 /// An empty [`Game::Sequence`] shall always find an empty [`Find`].
 #[test]
 fn empty() {
-    let cur = Cur::new(Game::Sequence(vec![]));
+    let game = Game::Sequence(vec![]);
+    let cur = Cur::new(&game);
 
     assert_find!(cur; ""; 0, 0, "");
     assert_find!(cur; "a"; 0, 0, "");
@@ -23,7 +24,8 @@ fn empty() {
 /// [`Scent::Char`] shall find the first [`Find`].
 #[test]
 fn char() {
-    let cur = Cur::new(Game::Single(Scent::Char('a')));
+    let game = Game::Single(Scent::Char('a'));
+    let cur = Cur::new(&game);
 
     assert_find!(cur; "a"; 0, 1, "a");
     assert_find!(cur; "ab"; 0, 1, "a");
@@ -35,7 +37,7 @@ fn char() {
 /// [`Scent::Range`] shall find the first [`Find`].
 #[test]
 fn range() {
-    let cur = Cur::new(Game::Single(Scent::Range('b', 'd')));
+    let cur = Cur::new(&Game::Single(Scent::Range('b', 'd')));
 
     assert_find!(cur; "b"; 0, 1, "b");
     assert_find!(cur; "cc"; 0, 1, "c");
@@ -49,11 +51,12 @@ fn range() {
 /// [`Game::Union`] of [`Scent::Char`]s shall find the first [`Find`].
 #[test]
 fn union_of_chars() {
-    let cur = Cur::new(Game::Union(vec![
+    let game = Game::Union(vec![
         Branch::Single(Scent::Char('a')),
         Branch::Single(Scent::Char('b')),
         Branch::Single(Scent::Char('c')),
-    ]));
+    ]);
+    let cur = Cur::new(&game);
 
     assert_find!(cur; "a"; 0, 1, "a");
     assert_find!(cur; "bb"; 0, 1, "b");
@@ -66,11 +69,12 @@ fn union_of_chars() {
 /// [`Game::Sequence`] of [`Scent::Char`]s shall find the first [`Find`].
 #[test]
 fn sequence_of_chars() {
-    let cur = Cur::new(Game::Sequence(vec![
+    let game = Game::Sequence(vec![
         Step::Single(Scent::Char('a')),
         Step::Single(Scent::Char('b')),
         Step::Single(Scent::Char('c')),
-    ]));
+    ]);
+    let cur = Cur::new(&game);
 
     assert_find!(cur; "abc"; 0, 3, "abc");
     assert_find!(cur; "abcd"; 0, 3, "abc");
@@ -84,7 +88,7 @@ fn sequence_of_chars() {
 /// [`Game::Union`] of [`Game`]s  where at least 1 [`Game`] is a [`Game::Sequence`] shall find the first [`Find`].
 #[test]
 fn union_sequences() {
-    let cur = Cur::new(Game::Union(vec![
+    let game = Game::Union(vec![
         Branch::Sequence(vec![
             Step::Single(Scent::Char('a')),
             Step::Single(Scent::Char('b')),
@@ -95,7 +99,8 @@ fn union_sequences() {
             Step::Single(Scent::Char('e')),
         ]),
         Branch::Single(Scent::Char('f')),
-    ]));
+    ]);
+    let cur = Cur::new(&game);
 
     assert_find!(cur; "abc"; 0, 3, "abc");
     assert_find!(cur; "de"; 0, 2, "de");
@@ -110,7 +115,7 @@ fn union_sequences() {
 /// [`Game::Repetition`] shall find a [`Find`] with start and end of 0.
 #[test]
 fn min_repetition() {
-    let cur = Cur::new(Game::Repetition(Pattern::Single(Scent::Char('a'))));
+    let cur = Cur::new(&Game::Repetition(Pattern::Single(Scent::Char('a'))));
 
     assert_find!(cur; ""; 0, 0, "");
     assert_find!(cur; "a"; 0, 0, "");
@@ -121,11 +126,12 @@ fn min_repetition() {
 /// [`Game::Sequence`] with [`Game::Repetition`] followed by the repeated [`Game`].
 #[test]
 fn sequence_repetition_and_repeat() {
-    let cur = Cur::new(Game::Sequence(vec![
+    let game = Game::Sequence(vec![
         Step::Single(Scent::Char('b')),
         Step::Repetition(Pattern::Single(Scent::Char('a'))),
         Step::Single(Scent::Char('b')),
-    ]));
+    ]);
+    let cur = Cur::new(&game);
 
     assert_find!(cur; "bb"; 0, 2, "bb");
     assert_find!(cur; "bab"; 0, 3, "bab");
