@@ -94,20 +94,6 @@ pub enum Step {
     Item(&'static str, Box<Game>),
 }
 
-// TODO: Is this needed instead of using steps().
-impl From<Game> for Vec<Step> {
-    #[inline]
-    fn from(game: Game) -> Self {
-        match game {
-            Game::Single(scent) => vec![Step::Single(scent)],
-            Game::Union(branches) => vec![Step::Union(branches)],
-            Game::Sequence(steps) => steps,
-            Game::Repetition(pattern) => vec![Step::Repetition(pattern)],
-            Game::Item(name, g) => vec![Step::Item(name, g)],
-        }
-    }
-}
-
 /// A game to repeat any number of times.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pattern {
@@ -187,7 +173,9 @@ impl Game {
     }
 
     /// Converts `self` into [`Step`]s.
-    fn steps(self) -> Vec<Step> {
+    #[inline]
+    #[must_use]
+    pub fn into_steps(self) -> Vec<Step> {
         match self {
             Self::Single(scent) => vec![Step::Single(scent)],
             Self::Union(branches) => vec![Step::Union(branches)],
@@ -321,12 +309,10 @@ impl<'l> Find<'l> {
         let finish = range.end.len;
 
         finish.checked_sub(start).and_then(|len| {
-            range.start.chars.as_str().get(..len).map(|text| {
-                Self {
-                    start,
-                    finish,
-                    text,
-                }
+            range.start.chars.as_str().get(..len).map(|text| Self {
+                start,
+                finish,
+                text,
             })
         })
     }
@@ -503,8 +489,7 @@ impl<'a> Cur<'a> {
     #[inline]
     #[must_use]
     pub fn is_game(&self, land: &str) -> bool {
-        hunt(self.game.clone(), Spot::from(land), &mut Captures::new())
-            .any(Spot::has_no_more)
+        hunt(self.game.clone(), Spot::from(land), &mut Captures::new()).any(Spot::has_no_more)
     }
 
     /// Returns the first [`Find`] that matches the [`Game`] `self` is hunting starting from each consecutive [`Spot`] of `land`.

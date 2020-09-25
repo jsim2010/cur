@@ -1,9 +1,9 @@
 use cur::*;
 
-/// `None` is replaced by an empty `Game::Sequence`.
+/// `[]` is replaced by an empty `Game::Sequence`.
 #[test]
 fn none() {
-    game!(EMPTY = None);
+    game!(EMPTY = []);
 
     assert_eq!(*EMPTY, Game::Sequence(vec![]));
 }
@@ -52,7 +52,15 @@ fn byte() {
 fn byte_string() {
     game!(BYTE_STR = b"test");
 
-    assert_eq!(*BYTE_STR, Game::Sequence(vec![Step::Single(Scent::Char('t')), Step::Single(Scent::Char('e')), Step::Single(Scent::Char('s')), Step::Single(Scent::Char('t'))]));
+    assert_eq!(
+        *BYTE_STR,
+        Game::Sequence(vec![
+            Step::Single(Scent::Char('t')),
+            Step::Single(Scent::Char('e')),
+            Step::Single(Scent::Char('s')),
+            Step::Single(Scent::Char('t'))
+        ])
+    );
 }
 
 /// A parenthesis around a single `Game` is replaced by the `Game`.

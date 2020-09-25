@@ -4,33 +4,38 @@
 extern crate alloc;
 
 use {
-    alloc::{string::ToString, vec::Vec},
-    core::convert::{TryFrom, TryInto},
+    alloc::{string::ToString, vec, vec::Vec},
+    core::{ops::Range, convert::{TryFrom, TryInto}},
     fehler::{throw, throws},
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::{quote, ToTokens},
     syn::{
         parse::{Parse, ParseStream, Result as ParseResult},
-        parse_macro_input, Error, ExprPath, Expr, ExprAssign, ExprRange,
-        Lit, RangeLimits, Type, Visibility, ExprType,
+        parse_macro_input, Error, Expr, ExprAssign, ExprRange, ExprRepeat, ExprType, Lit,
+        RangeLimits, Type, Visibility,
     },
 };
 
+/// The first `char` in Unicode.
+const FIRST_CHAR: char = '\u{0}';
+/// The last `char` in Unicode.
+const LAST_CHAR: char = '\u{10ffff}';
 /// The first scalar value after Unicode surrogates.
 const FIRST_CHAR_AFTER_SURROGATES_VALUE: u32 = 0xe000;
 /// The last `char` before Unicode surrogates.
 const LAST_CHAR_BEFORE_SURROGATES: char = '\u{d7ff}';
 
+// TODO: Write out the definition of a GameExpression.
 /// Converts `input` into a `Game`.
 ///
 /// Creating `Game`s can quickly become complex and error-prone. It is intended that a user can
 /// use this procedural macro to build a `Game` using valid rust syntax that is easily
 /// understandable.
 ///
-/// The format of the macro input shall be `<visibility> <assignment expression>`.
-///
 /// Calling this procedural macro will create a constant with the given visibility and name. The type of the constant shall be a `Lazy<Game>`, which allows for operations that are not const to be evaluated after compilation.
+///
+/// The format of the macro input shall be `Visibility AssignmentExpression`. The value expression of the assignment expression shall be a game expression.
 ///
 /// # Example(s)
 /// ```
@@ -90,17 +95,19 @@ impl ToTokens for GameDef {
 fn gamify(expr: Expr) -> TokenStream2 {
     match expr {
         Expr::Lit(lit) => gamify_lit(lit.lit)?,
-        Expr::Path(path) => gamify_path(&path),
+        Expr::Path(path) => quote! {
+            #path.clone()
+        },
         Expr::Paren(paren) => {
             let inner_expr = gamify(*paren.expr)?;
-            quote!{
+            quote! {
                 (#inner_expr)
             }
         }
         Expr::Try(try_expr) => {
             let optional_expr = gamify(*try_expr.expr)?;
-            quote!{
-                (Game::Sequence(vec![])|#optional_expr)
+            quote! {
+                Game::Sequence(vec![]) | #optional_expr
             }
         }
         Expr::Binary(binary) => {
@@ -114,26 +121,7 @@ fn gamify(expr: Expr) -> TokenStream2 {
         }
         Expr::Range(range) => gamify_range(range)?,
         Expr::Type(ty) => gamify_type(ty)?,
-        Expr::Repeat(repeat) => {
-            let quantifier = Quantifier::try_from(*repeat.len)?;
-            let game = gamify(*repeat.expr)?;
-
-            let mut games = Vec::new();
-
-            for _ in 0..quantifier.minimum {
-                games.push(game.clone());
-            }
-
-            if quantifier.maximum == usize::max_value() {
-                games.push(quote!{Game::Repetition(Pattern::from(#game))});
-            } else {
-                for _ in quantifier.minimum..quantifier.maximum {
-                    games.push(quote!{Game::Sequence(vec![])|#game});
-                }
-            }
-
-            quote_sequence(&games)
-        }
+        Expr::Repeat(repeat) => gamify_repeat(repeat)?,
         Expr::Array(array) => {
             let mut elements = Vec::new();
 
@@ -174,110 +162,94 @@ fn gamify(expr: Expr) -> TokenStream2 {
         | Expr::TryBlock(..)
         | Expr::Yield(..)
         | Expr::Verbatim(..)
-        | Expr::__Nonexhaustive => {
-            throw!(Error::new_spanned(
-                expr,
-                "expression cannot be converted into `Game`",
-            ))
-        }
+        | Expr::__Nonexhaustive => throw!(Error::new_spanned(
+            expr,
+            "expression cannot be converted into `Game`",
+        )),
     }
 }
 
 /// Quotes `lit` as a `Game`.
-fn gamify_lit(lit: Lit) -> Result<TokenStream2, Error> {
+#[throws(Error)]
+fn gamify_lit(lit: Lit) -> TokenStream2 {
     let mut games = Vec::new();
 
     match lit {
         Lit::Char(c) => {
-            games.push(quote!{
+            games.push(quote! {
                 Game::from(#c)
             });
         }
         Lit::Byte(byte) => {
-            games.push(quote!{
+            games.push(quote! {
                 Game::from(#byte)
             });
         }
         Lit::Str(s) => {
             for c in s.value().chars() {
-                games.push(quote!{
+                games.push(quote! {
                     Game::from(#c)
                 });
             }
         }
         Lit::ByteStr(byte_string) => {
             for byte in byte_string.value() {
-                games.push(quote!{
+                games.push(quote! {
                     Game::from(#byte)
                 })
             }
         }
-        Lit::Int(..)
-        | Lit::Float(..)
-        | Lit::Bool(..)
-        | Lit::Verbatim(..) => {
-            return Err(Error::new_spanned(
+        Lit::Int(..) | Lit::Float(..) | Lit::Bool(..) | Lit::Verbatim(..) => {
+            throw!(Error::new_spanned(
                 lit,
                 "expected a byte, byte string, character or string literal",
-            ));
+            ))
         }
     }
 
-    Ok(quote_sequence(&games))
-}
-
-/// Quotes `path` as a `Game`.
-fn gamify_path(path: &ExprPath) -> TokenStream2 {
-    if let Some(ident) = path.path.get_ident() {
-        if ident.to_string().as_str() == "None" {
-            quote!{
-                Game::Sequence(vec![])
-            }
-        } else {
-            quote!{
-                #path.clone()
-            }
-        }
-    } else {
-        quote!{
-            #path.clone()
-        }
-    }
+    quote_sequence(&games)
 }
 
 /// Quotes `range` as a `Game`.
-fn gamify_range(range: ExprRange) -> Result<TokenStream2, Error> {
-    let end = if let Some(to) = range.to {
-        let to_char = char_try_from_expr(*to.clone())?;
-
-        if let RangeLimits::HalfOpen(..) = range.limits {
-            let end_code = u32::from(to_char);
-
-            // Because end_code came from a char, FIRST_CHAR_AFTER_SURROGATES_VALUE is the only possible value that requires special handling.
-            if end_code == FIRST_CHAR_AFTER_SURROGATES_VALUE {
-                LAST_CHAR_BEFORE_SURROGATES
-            } else {
-                char::try_from(end_code.checked_sub(1).ok_or_else(|| {
-                    Error::new_spanned(to.clone(), "End bound cannot be exclusive 0")
-                })?)
-                .map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
-            }
-        } else {
-            to_char
-        }
-    } else {
-        '\u{10ffff}'
+#[throws(Error)]
+fn gamify_range(range: ExprRange) -> TokenStream2 {
+    let last_char = parse_last_char(&range)?;
+    let first_char = match range.from {
+        None => FIRST_CHAR,
+        Some(from) => parse_char(*from)?,
+    };
+    // TODO: Submit an issue and add link here.
+    // fehler does not properly return quote! so must store as local variable then return.
+    let game = quote! {
+        Game::Single(Scent::Range(#first_char, #last_char))
     };
 
-    let start = range.from.map_or(Ok('\u{0}'), |from| char_try_from_expr(*from))?;
+    game
+}
 
-    Ok(quote!{
-        Game::Single(Scent::Range(#start, #end))
-    })
+/// Quotes `repeat` as a `Game`.
+#[throws(Error)]
+fn gamify_repeat(repeat: ExprRepeat) -> TokenStream2 {
+    let quantifier = Quantifier::try_from(*repeat.len)?;
+    let game = gamify(*repeat.expr)?;
+    let mut games = vec![game.clone(); quantifier.required()];
+
+    if quantifier.is_unlimited() {
+        games.push(quote! {
+            Game::Repetition(Pattern::from(#game))
+        });
+    } else {
+        games.extend(vec![quote!{
+            Game::Sequence(vec![])|#game
+        }; quantifier.optional()]);
+    }
+
+    quote_sequence(&games)
 }
 
 /// Quotes `ty` as a `Game`.
-fn gamify_type(ty: ExprType) -> Result<TokenStream2, Error> {
+#[throws(Error)]
+fn gamify_type(ty: ExprType) -> TokenStream2 {
     let id = match *ty.ty.clone() {
         Type::Path(t) => t.path.get_ident().map_or(
             Err(Error::new_spanned(ty.ty, "expected single ident")),
@@ -297,44 +269,57 @@ fn gamify_type(ty: ExprType) -> Result<TokenStream2, Error> {
         | Type::TraitObject(..)
         | Type::Tuple(..)
         | Type::Verbatim(..)
-        | Type::__Nonexhaustive => Err(Error::new_spanned(ty.ty, "expected path")),
+        | Type::__Nonexhaustive => throw!(Error::new_spanned(ty.ty, "expected path")),
     }?;
     let game = gamify(*ty.expr)?;
+    // fehler does not properly return quote! so must store as local variable then return.
+    let item = quote! {
+        Game::Item(#id, Box::new(#game))
+    };
 
-    Ok(quote!{Game::Item(#id, Box::new(#game))})
+    item
 }
 
 /// Quotes `games` as a `Game::Sequence`.
 fn quote_sequence(games: &[TokenStream2]) -> TokenStream2 {
+    // TODO: Follow up on this false positive.
     #[allow(clippy::integer_arithmetic)] // False positive.
     if games.is_empty() {
         // Output an empty sequence. Required because concat() cannot infer type from an empty Vec.
-        // TODO: There might be a way to specify the type in concat such that this branch is not needed.
-        quote!{
+        quote! {
             Game::Sequence(vec![])
         }
     } else if games.len() == 1 {
         // Only output the single game.
-        quote!{
+        quote! {
             #((#games))*
         }
     } else {
-        quote!{
-            Game::Sequence(vec![#(Vec::<Step>::from(#games)),*].concat())
+        quote! {
+            Game::Sequence(vec![#((#games).into_steps()),*].concat())
         }
     }
 }
 
 /// Signifies the number of times a game can be repeated.
 #[derive(Debug)]
-struct Quantifier {
-    /// The smallest number of repeats.
-    minimum: usize,
-    /// The largest number of repeats.
-    ///
-    /// A number <= `minimum` indicates the game must be repeated exactly
-    /// `minimum` times.
-    maximum: usize,
+struct Quantifier(Range<usize>);
+
+impl Quantifier {
+    /// Returns the number of required repetitions specified by `self`.
+    const fn required(&self) -> usize {
+        self.0.start
+    }
+
+    /// Returns the number of optional repetitions specified by `self`.
+    fn optional(&self) -> usize {
+        self.0.len()
+    }
+
+    /// Returns if `self` has no limit.
+    const fn is_unlimited(&self) -> bool {
+        self.0.end == usize::max_value()
+    }
 }
 
 impl TryFrom<Expr> for Quantifier {
@@ -391,12 +376,11 @@ impl TryFrom<ExprRange> for Quantifier {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
-        Ok(Self {
-            minimum: value
+        Ok(Self (
+            value
                 .clone()
                 .from
-                .map_or(Ok(0), |from| usize_try_from_expr(*from))?,
-            maximum: value.clone().to.map_or(Ok(usize::max_value()), |to| {
+                .map_or(Ok(0), |from| usize_try_from_expr(*from))?..value.clone().to.map_or(Ok(usize::max_value()), |to| {
                 usize_try_from_expr(*to).map(|max| {
                     max.saturating_sub(if let RangeLimits::HalfOpen(..) = value.limits {
                         1
@@ -404,8 +388,8 @@ impl TryFrom<ExprRange> for Quantifier {
                         0
                     })
                 })
-            })?,
-        })
+            })?
+        ))
     }
 }
 
@@ -413,17 +397,44 @@ impl TryFrom<Lit> for Quantifier {
     type Error = Error;
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
-        usize_try_from_lit(&value).map(|minimum| Self {
-            minimum,
-            maximum: 0,
-        })
+        usize_try_from_lit(&value).map(|minimum| Self (
+            minimum..minimum
+        ))
     }
 }
 
-/// Converts `expr` to a [`char`].
+/// Parses the last `char` that is included in `range`.
+#[throws(Error)]
+fn parse_last_char(range: &ExprRange) -> char {
+    match &range.to {
+        None => LAST_CHAR,
+        Some(to) => {
+            let to_char = parse_char(*to.clone())?;
+
+            match range.limits {
+                RangeLimits::Closed(..) => to_char,
+                RangeLimits::HalfOpen(..) => {
+                    let end_code = u32::from(to_char);
+
+                    // Because end_code came from a char, FIRST_CHAR_AFTER_SURROGATES_VALUE is the only possible value that requires special handling.
+                    if end_code == FIRST_CHAR_AFTER_SURROGATES_VALUE {
+                        LAST_CHAR_BEFORE_SURROGATES
+                    } else {
+                        char::try_from(end_code.checked_sub(1).ok_or_else(|| {
+                            Error::new_spanned(to.clone(), "End bound cannot be exclusive 0")
+                        })?)
+                        .map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Converts `expr` into a [`char`].
 ///
-/// [`Err`] indicates `expr` is unable to be converted.
-fn char_try_from_expr(expr: Expr) -> ParseResult<char> {
+/// Returns [`Err`] if `expr` is unable to be converted.
+fn parse_char(expr: Expr) -> ParseResult<char> {
     if let Expr::Lit(literal) = expr {
         if let Lit::Char(c) = literal.lit {
             Ok(c.value())
