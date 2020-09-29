@@ -1,84 +1,22 @@
 use cur::*;
 
-/// `A?` is replaced by a `Game::Union` of nothing and `A`.
+// Processing::game_pattern_syntax[repeat[exactly_zero]]
 #[test]
-fn try_expr() {
-    game!(TRY = 'a'?);
+fn exactly_zero() {
+    game!(ZERO_REPEAT = ['a'; 0]);
 
-    assert_eq!(
-        *TRY,
-        Game::Union(vec![
-            Branch::Sequence(vec![]),
-            Branch::Single(Scent::Char('a'))
-        ])
-    );
+    assert_eq!(*ZERO_REPEAT, Game::Sequence(vec![]));
 }
 
-/// `(A | B)? is replaced by a single `Game::Union`.
+// Processing::game_pattern_syntax[repeat[exactly_one]]
 #[test]
-fn try_union() {
-    game!(TRY_UNION = ('a' | 'b')?);
+fn exactly_one() {
+    game!(ONE_REPEAT = ['a'; 1]);
 
-    assert_eq!(
-        *TRY_UNION,
-        Game::Union(vec![
-            Branch::Sequence(vec![]),
-            Branch::Single(Scent::Char('a')),
-            Branch::Single(Scent::Char('b'))
-        ])
-    );
+    assert_eq!(*ONE_REPEAT, Game::Single(Scent::Char('a')));
 }
 
-/// `A | B?` is replaced by a single `Game::Union`.
-#[test]
-fn union_with_try() {
-    game!(UNION_WITH_TRY = 'a' | 'b'?);
-
-    assert_eq!(
-        *UNION_WITH_TRY,
-        Game::Union(vec![
-            Branch::Single(Scent::Char('a')),
-            Branch::Sequence(vec![]),
-            Branch::Single(Scent::Char('b'))
-        ])
-    );
-}
-
-/// `[A, B]?` is replaced by a `Game::Union`.
-#[test]
-fn try_sequence() {
-    game!(TRY_SEQUENCE = ['a', 'b']?);
-
-    assert_eq!(
-        *TRY_SEQUENCE,
-        Game::Union(vec![
-            Branch::Sequence(vec![]),
-            Branch::Sequence(vec![
-                Step::Single(Scent::Char('a')),
-                Step::Single(Scent::Char('b'))
-            ]),
-        ])
-    );
-}
-
-/// `[A, B?]` is replaced by a `Game::Sequence`.
-#[test]
-fn sequence_with_try() {
-    game!(SEQUENCE_WITH_TRY = ['a', 'b'?]);
-
-    assert_eq!(
-        *SEQUENCE_WITH_TRY,
-        Game::Sequence(vec![
-            Step::Single(Scent::Char('a')),
-            Step::Union(vec![
-                Branch::Sequence(vec![]),
-                Branch::Single(Scent::Char('b')),
-            ]),
-        ]),
-    );
-}
-
-/// Index with usize.
+// Processing::game_pattern_syntax[repeat[exact]]
 #[test]
 fn exact() {
     game!(THREE_REPEATS = ['a'; 3]);
@@ -93,32 +31,15 @@ fn exact() {
     );
 }
 
+// Processing::game_pattern_syntax[repeat[any]]
 #[test]
-fn exactly_one() {
-    game!(ONE_REPEAT = ['a'; 1]);
+fn any() {
+    game!(ANY = ['a'; ..]);
 
-    assert_eq!(*ONE_REPEAT, Game::Single(Scent::Char('a')));
+    assert_eq!(*ANY, Game::Repetition(Pattern::Single(Scent::Char('a'))));
 }
 
-#[test]
-fn exactly_zero() {
-    game!(ZERO_REPEAT = ['a'; 0]);
-
-    assert_eq!(*ZERO_REPEAT, Game::Sequence(vec![]));
-}
-
-/// Index with RangeFull.
-#[test]
-fn zero_or_more() {
-    game!(ZERO_OR_MORE = ['a'; ..]);
-
-    assert_eq!(
-        *ZERO_OR_MORE,
-        Game::Repetition(Pattern::Single(Scent::Char('a')))
-    );
-}
-
-/// Index with RangeFrom.
+// Processing::game_pattern_syntax[repeat[at_least]]
 #[test]
 fn start_or_more() {
     game!(THREE_OR_MORE = ['a'; 3..]);
@@ -134,7 +55,7 @@ fn start_or_more() {
     );
 }
 
-/// Index with RangeTo.
+// Processing::game_pattern_syntax[repeat[less_than]]
 #[test]
 fn less_than_end() {
     game!(LESS_THAN_FOUR = ['a'; ..4]);
@@ -158,7 +79,7 @@ fn less_than_end() {
     );
 }
 
-/// Index with RangeToInclusive.
+// Processing::game_pattern_syntax[repeat[no_more]]
 #[test]
 fn end_or_less() {
     game!(THREE_OR_LESS = ['a'; ..=3]);
@@ -182,7 +103,7 @@ fn end_or_less() {
     );
 }
 
-/// Index with Range.
+// Processing::game_pattern_syntax[repeat[exclusive]]
 #[test]
 fn start_to_end() {
     game!(TWO_TO_FIVE = ['a'; 2..5]);
@@ -204,7 +125,7 @@ fn start_to_end() {
     );
 }
 
-/// Index with RangeToInclusive.
+// Processing::game_pattern_syntax[repeat[inclusive]]
 #[test]
 fn start_to_end_inclusive() {
     game!(TWO_TO_FOUR_INCLUSIVE = ['a'; 2..=4]);
@@ -226,7 +147,7 @@ fn start_to_end_inclusive() {
     );
 }
 
-/// BitOr with Index.
+// Processing::game_pattern_syntax[repeat[exclusive]]
 #[test]
 fn repeat_union() {
     game!(REPEAT_UNION = ['a' | 'b'; 1..3]);
@@ -247,10 +168,10 @@ fn repeat_union() {
     );
 }
 
-/// Add with Index.
+// Processing::game_pattern_syntax[repeat[at_least]]
 #[test]
 fn repeat_sequence() {
-    game!(REPEAT_SEQUENCE = [['a', 'b']; 1..]);
+    game!(REPEAT_SEQUENCE = [('a', 'b'); 1..]);
 
     assert_eq!(
         *REPEAT_SEQUENCE,

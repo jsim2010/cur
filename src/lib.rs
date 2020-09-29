@@ -61,13 +61,6 @@ pub enum Branch {
     Item(&'static str, Box<Game>),
 }
 
-impl From<Branch> for Vec<Branch> {
-    #[inline]
-    fn from(branch: Branch) -> Self {
-        vec![branch]
-    }
-}
-
 impl From<Game> for Vec<Branch> {
     #[inline]
     fn from(game: Game) -> Self {
@@ -143,7 +136,7 @@ pub enum Game {
 
 impl Game {
     /// Converts `self` into [`Branch`]es.
-    fn branches(self) -> Vec<Branch> {
+    pub fn into_branches(self) -> Vec<Branch> {
         match self {
             Self::Single(scent) => vec![Branch::Single(scent)],
             Self::Union(branches) => branches,
@@ -155,7 +148,7 @@ impl Game {
 
     /// Converts `self` into a [`Pattern`].
     #[allow(clippy::missing_const_for_fn)] // False positive.
-    fn pattern(self) -> Pattern {
+    pub fn into_pattern(self) -> Pattern {
         match self {
             Self::Single(scent) => Pattern::Single(scent),
             Self::Union(branches) => Pattern::Union(branches),
@@ -163,13 +156,6 @@ impl Game {
             Self::Repetition(pattern) => pattern,
             Self::Item(name, game) => Pattern::Item(name, game),
         }
-    }
-
-    /// Returns a repetition of `self`.
-    #[inline]
-    #[must_use]
-    pub fn repeat(self) -> Self {
-        Self::Repetition(self.pattern())
     }
 
     /// Converts `self` into [`Step`]s.
@@ -191,8 +177,8 @@ impl BitOr for Game {
 
     #[inline]
     fn bitor(self, rhs: Self) -> Self::Output {
-        let mut branches = self.branches();
-        branches.append(&mut rhs.branches());
+        let mut branches = self.into_branches();
+        branches.append(&mut rhs.into_branches());
         Self::Union(branches)
     }
 }

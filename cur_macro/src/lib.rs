@@ -4,29 +4,24 @@
 extern crate alloc;
 
 use {
-    alloc::{string::ToString, vec, vec::Vec},
-    core::{ops::Range, convert::{TryFrom, TryInto}},
-    fehler::{throw, throws},
+    alloc::{boxed::Box, vec, vec::Vec},
+    core::{
+        convert::{TryFrom, TryInto},
+        ops::Range,
+    },
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::{quote, ToTokens},
     syn::{
-        parse::{Parse, ParseStream, Result as ParseResult},
-        parse_macro_input, Error, Expr, ExprAssign, ExprRange, ExprRepeat, ExprType, Lit,
-        RangeLimits, Type, Visibility,
+        bracketed, parenthesized,
+        parse::{Lookahead1, Parse, ParseStream, Result as ParseResult},
+        parse_macro_input,
+        punctuated::Punctuated,
+        token, Error, Expr, ExprRange, Ident, Lit, LitByte, LitByteStr, LitChar, LitInt, LitStr,
+        Path, PathArguments, PathSegment, RangeLimits, Token, Visibility,
     },
 };
 
-/// The first `char` in Unicode.
-const FIRST_CHAR: char = '\u{0}';
-/// The last `char` in Unicode.
-const LAST_CHAR: char = '\u{10ffff}';
-/// The first scalar value after Unicode surrogates.
-const FIRST_CHAR_AFTER_SURROGATES_VALUE: u32 = 0xe000;
-/// The last `char` before Unicode surrogates.
-const LAST_CHAR_BEFORE_SURROGATES: char = '\u{d7ff}';
-
-// TODO: Write out the definition of a GameExpression.
 /// Converts `input` into a `Game`.
 ///
 /// Creating `Game`s can quickly become complex and error-prone. It is intended that a user can
@@ -41,7 +36,7 @@ const LAST_CHAR_BEFORE_SURROGATES: char = '\u{d7ff}';
 /// ```
 /// use cur::*;
 ///
-/// game!(HELLO_WORLD = ["Hello", ' ', "world", '!']);
+/// game!(HELLO_WORLD = ("Hello", ' ', "world", '!'));
 ///
 /// assert!(Cur::new(&HELLO_WORLD).is_game("Hello world!"));
 /// ```
@@ -60,20 +55,18 @@ struct GameDef {
     /// The visibility of the `Game`.
     vis: Visibility,
     /// The identifier of the `Game`.
-    name: Expr,
-    /// The expression of the `Game`.
-    expr: TokenStream2,
+    name: Ident,
+    eq: Token![=],
+    game: GameInput,
 }
 
 impl Parse for GameDef {
     fn parse(input: ParseStream<'_>) -> ParseResult<Self> {
-        let vis = input.parse()?;
-        input.parse().and_then(|assign_expr: ExprAssign| {
-            Ok(Self {
-                vis,
-                name: *assign_expr.left,
-                expr: gamify(*assign_expr.right)?,
-            })
+        Ok(Self {
+            vis: input.parse()?,
+            name: input.parse()?,
+            eq: input.parse()?,
+            game: input.parse()?,
         })
     }
 }
@@ -82,232 +75,209 @@ impl ToTokens for GameDef {
     fn to_tokens(&self, tokens: &mut TokenStream2) {
         let vis = &self.vis;
         let name = &self.name;
-        let expr = &self.expr;
+        let eq = &self.eq;
+        let game = &self.game;
 
         tokens.extend(quote! {
-            #vis const #name: Lazy<Game> = Lazy::new(|| #expr);
+            #vis const #name: Lazy<Game> #eq Lazy::new(|| #game);
         });
     }
 }
 
-/// Quotes `expr` as a `Game`.
-#[throws(Error)]
-fn gamify(expr: Expr) -> TokenStream2 {
-    match expr {
-        Expr::Lit(lit) => gamify_lit(lit.lit)?,
-        Expr::Path(path) => quote! {
-            #path.clone()
-        },
-        Expr::Paren(paren) => {
-            let inner_expr = gamify(*paren.expr)?;
-            quote! {
-                (#inner_expr)
-            }
-        }
-        Expr::Try(try_expr) => {
-            let optional_expr = gamify(*try_expr.expr)?;
-            quote! {
-                Game::Sequence(vec![]) | #optional_expr
-            }
-        }
-        Expr::Binary(binary) => {
-            let left = gamify(*binary.left)?;
-            let op = binary.op;
-            let right = gamify(*binary.right)?;
-
-            quote! {
-                #left #op #right
-            }
-        }
-        Expr::Range(range) => gamify_range(range)?,
-        Expr::Type(ty) => gamify_type(ty)?,
-        Expr::Repeat(repeat) => gamify_repeat(repeat)?,
-        Expr::Array(array) => {
-            let mut elements = Vec::new();
-
-            for element in array.elems.iter() {
-                elements.push(gamify(element.clone())?);
-            }
-
-            quote_sequence(&elements)
-        }
-        Expr::Unary(..)
-        | Expr::Index(..)
-        | Expr::Box(..)
-        | Expr::Await(..)
-        | Expr::Call(..)
-        | Expr::MethodCall(..)
-        | Expr::Tuple(..)
-        | Expr::Cast(..)
-        | Expr::Let(..)
-        | Expr::If(..)
-        | Expr::While(..)
-        | Expr::ForLoop(..)
-        | Expr::Loop(..)
-        | Expr::Match(..)
-        | Expr::Closure(..)
-        | Expr::Unsafe(..)
-        | Expr::Block(..)
-        | Expr::Assign(..)
-        | Expr::AssignOp(..)
-        | Expr::Field(..)
-        | Expr::Reference(..)
-        | Expr::Break(..)
-        | Expr::Continue(..)
-        | Expr::Return(..)
-        | Expr::Macro(..)
-        | Expr::Struct(..)
-        | Expr::Group(..)
-        | Expr::Async(..)
-        | Expr::TryBlock(..)
-        | Expr::Yield(..)
-        | Expr::Verbatim(..)
-        | Expr::__Nonexhaustive => throw!(Error::new_spanned(
-            expr,
-            "expression cannot be converted into `Game`",
-        )),
-    }
+#[derive(Clone)]
+enum GameInput {
+    Single(char),
+    Range(char, char),
+    Sequence(Vec<GameInput>),
+    Union(Vec<GameInput>),
+    Item {
+        name: Ident,
+        game: Box<GameInput>,
+    },
+    Star(Box<GameInput>),
+    Repeat {
+        game: Box<GameInput>,
+        quantifier: Quantifier,
+    },
+    Path(Path),
 }
 
-/// Quotes `lit` as a `Game`.
-#[throws(Error)]
-fn gamify_lit(lit: Lit) -> TokenStream2 {
-    let mut games = Vec::new();
+impl Parse for GameInput {
+    fn parse(input: ParseStream<'_>) -> ParseResult<Self> {
+        let mut lookahead = input.lookahead1();
 
-    match lit {
-        Lit::Char(c) => {
-            games.push(quote! {
-                Game::from(#c)
-            });
-        }
-        Lit::Byte(byte) => {
-            games.push(quote! {
-                Game::from(#byte)
-            });
-        }
-        Lit::Str(s) => {
-            for c in s.value().chars() {
-                games.push(quote! {
-                    Game::from(#c)
-                });
+        let game = if lookahead.peek(token::Paren) {
+            let content;
+            let _ = parenthesized!(content in input);
+            if content.is_empty() {
+                Ok(Self::Sequence(vec![]))
+            } else {
+                let steps: Punctuated<GameInput, Token![,]> =
+                    Punctuated::parse_terminated(&content)?;
+
+                Ok(Self::Sequence(steps.into_iter().collect()))
             }
-        }
-        Lit::ByteStr(byte_string) => {
-            for byte in byte_string.value() {
-                games.push(quote! {
-                    Game::from(#byte)
-                })
+        } else if lookahead.peek(LitChar) {
+            let c: LitChar = input.parse()?;
+            lookahead = input.lookahead1();
+
+            if lookahead.peek(Token![..=]) {
+                let _: Token![..=] = input.parse()?;
+                let end: LitChar = input.parse()?;
+                Ok(Self::Range(c.value(), end.value()))
+            } else {
+                Ok(Self::Single(c.value()))
             }
-        }
-        Lit::Int(..) | Lit::Float(..) | Lit::Bool(..) | Lit::Verbatim(..) => {
-            throw!(Error::new_spanned(
-                lit,
-                "expected a byte, byte string, character or string literal",
+        } else if lookahead.peek(LitStr) {
+            let s: LitStr = input.parse()?;
+            Ok(Self::Sequence(
+                s.value().chars().map(|c| Self::Single(c)).collect(),
             ))
+        } else if lookahead.peek(LitByte) {
+            let byte: LitByte = input.parse()?;
+            Ok(Self::Single(char::from(byte.value())))
+        } else if lookahead.peek(LitByteStr) {
+            let s: LitByteStr = input.parse()?;
+            let mut games = Vec::new();
+
+            for byte in s.value() {
+                games.push(Self::Single(char::from(byte)));
+            }
+
+            Ok(Self::Sequence(games))
+        } else if lookahead.peek(Token![_]) {
+            let _: Token![_] = input.parse()?;
+            Ok(Self::Range('\u{0}', '\u{10ffff}'))
+        } else if lookahead.peek(Ident) {
+            let name = input.parse()?;
+
+            if input.peek(Token![@]) {
+                let _: Token![@] = input.parse()?;
+
+                input.parse().map(|game| Self::Item { name, game })
+            } else {
+                let mut segments = Punctuated::new();
+                segments.push(PathSegment {
+                    ident: name,
+                    arguments: PathArguments::None,
+                });
+
+                while input.peek(Token![::]) {
+                    let _: Token![::] = input.parse()?;
+                    segments.push(input.parse()?);
+                }
+
+                Ok(Self::Path(Path {
+                    leading_colon: None,
+                    segments,
+                }))
+            }
+        } else if lookahead.peek(token::Bracket) {
+            let content;
+            let _ = bracketed!(content in input);
+            let game = content.parse()?;
+            let _: Token![;] = content.parse()?;
+            let quantifier = content.parse()?;
+
+            Ok(Self::Repeat { game, quantifier })
+        } else {
+            Err(lookahead.error())
+        };
+
+        lookahead = input.lookahead1();
+
+        if lookahead.peek(Token![?]) {
+            let _: Token![?] = input.parse()?;
+            game.map(|g| Self::Union(vec![Self::Sequence(vec![]), g]))
+        } else if lookahead.peek(Token![|]) {
+            let _: Token![|] = input.parse()?;
+            game.and_then(|g| Ok(Self::Union(vec![g, input.parse()?])))
+        } else {
+            game
         }
     }
-
-    quote_sequence(&games)
 }
 
-/// Quotes `range` as a `Game`.
-#[throws(Error)]
-fn gamify_range(range: ExprRange) -> TokenStream2 {
-    let last_char = parse_last_char(&range)?;
-    let first_char = match range.from {
-        None => FIRST_CHAR,
-        Some(from) => parse_char(*from)?,
-    };
-    // TODO: Submit an issue and add link here.
-    // fehler does not properly return quote! so must store as local variable then return.
-    let game = quote! {
-        Game::Single(Scent::Range(#first_char, #last_char))
-    };
+impl ToTokens for GameInput {
+    fn to_tokens(&self, tokens: &mut TokenStream2) {
+        tokens.extend(match self {
+            Self::Single(c) => {
+                quote! {
+                    Game::Single(Scent::Char(#c))
+                }
+            }
+            Self::Range(start, end) => {
+                quote! {
+                    Game::Single(Scent::Range(#start, #end))
+                }
+            }
+            Self::Sequence(games) => match games.len() {
+                0 => {
+                    quote! {
+                        Game::Sequence(vec![])
+                    }
+                }
+                1 => {
+                    let game = &games[0];
+                    quote! {
+                        #game
+                    }
+                }
+                _ => {
+                    quote! {
+                        Game::Sequence(vec![#(#games.into_steps()),*].concat())
+                    }
+                }
+            },
+            Self::Union(games) => {
+                quote! {
+                    Game::Union(vec![#(#games.into_branches()),*].concat())
+                }
+            }
+            Self::Item { name, game } => {
+                quote! {
+                    Game::Item(stringify!(#name), Box::new(#game))
+                }
+            }
+            Self::Repeat { game, quantifier } => {
+                let mut games = vec![*game.clone(); quantifier.required()];
 
-    game
-}
+                if quantifier.is_unlimited() {
+                    games.push(Self::Star(game.clone()));
+                } else {
+                    games.extend(vec![
+                        Self::Union(vec![Self::Sequence(vec![]), *game.clone()]);
+                        quantifier.optional()
+                    ]);
+                }
 
-/// Quotes `repeat` as a `Game`.
-#[throws(Error)]
-fn gamify_repeat(repeat: ExprRepeat) -> TokenStream2 {
-    let quantifier = Quantifier::try_from(*repeat.len)?;
-    let game = gamify(*repeat.expr)?;
-    let mut games = vec![game.clone(); quantifier.required()];
+                let sequence = Self::Sequence(games);
 
-    if quantifier.is_unlimited() {
-        games.push(quote! {
-            Game::Repetition(Pattern::from(#game))
-        });
-    } else {
-        games.extend(vec![quote!{
-            Game::Sequence(vec![])|#game
-        }; quantifier.optional()]);
-    }
-
-    quote_sequence(&games)
-}
-
-/// Quotes `ty` as a `Game`.
-#[throws(Error)]
-fn gamify_type(ty: ExprType) -> TokenStream2 {
-    let id = match *ty.ty.clone() {
-        Type::Path(t) => t.path.get_ident().map_or(
-            Err(Error::new_spanned(ty.ty, "expected single ident")),
-            |ident| Ok(ident.to_string().into_boxed_str()),
-        ),
-        Type::Array(..)
-        | Type::BareFn(..)
-        | Type::Group(..)
-        | Type::ImplTrait(..)
-        | Type::Infer(..)
-        | Type::Macro(..)
-        | Type::Never(..)
-        | Type::Paren(..)
-        | Type::Ptr(..)
-        | Type::Reference(..)
-        | Type::Slice(..)
-        | Type::TraitObject(..)
-        | Type::Tuple(..)
-        | Type::Verbatim(..)
-        | Type::__Nonexhaustive => throw!(Error::new_spanned(ty.ty, "expected path")),
-    }?;
-    let game = gamify(*ty.expr)?;
-    // fehler does not properly return quote! so must store as local variable then return.
-    let item = quote! {
-        Game::Item(#id, Box::new(#game))
-    };
-
-    item
-}
-
-/// Quotes `games` as a `Game::Sequence`.
-fn quote_sequence(games: &[TokenStream2]) -> TokenStream2 {
-    // TODO: Follow up on this false positive.
-    #[allow(clippy::integer_arithmetic)] // False positive.
-    if games.is_empty() {
-        // Output an empty sequence. Required because concat() cannot infer type from an empty Vec.
-        quote! {
-            Game::Sequence(vec![])
-        }
-    } else if games.len() == 1 {
-        // Only output the single game.
-        quote! {
-            #((#games))*
-        }
-    } else {
-        quote! {
-            Game::Sequence(vec![#((#games).into_steps()),*].concat())
-        }
+                quote! {
+                    #sequence
+                }
+            }
+            Self::Star(game) => {
+                quote! {
+                    Game::Repetition(#game.into_pattern())
+                }
+            }
+            Self::Path(path) => {
+                quote! {
+                    #path.clone()
+                }
+            }
+        })
     }
 }
 
 /// Signifies the number of times a game can be repeated.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Quantifier(Range<usize>);
 
 impl Quantifier {
     /// Returns the number of required repetitions specified by `self`.
-    const fn required(&self) -> usize {
+    fn required(&self) -> usize {
         self.0.start
     }
 
@@ -319,6 +289,21 @@ impl Quantifier {
     /// Returns if `self` has no limit.
     const fn is_unlimited(&self) -> bool {
         self.0.end == usize::max_value()
+    }
+}
+
+impl Parse for Quantifier {
+    fn parse(input: ParseStream<'_>) -> ParseResult<Self> {
+        let mut lookahead = input.lookahead1();
+
+        if lookahead.peek(LitInt) {
+            let min = parse_usize(input)?;
+            lookahead = input.lookahead1();
+
+            Ok(Self(min..parse_max(input, lookahead).unwrap_or(min)))
+        } else {
+            parse_max(input, lookahead).map(|max| Self(usize::min_value()..max))
+        }
     }
 }
 
@@ -376,19 +361,20 @@ impl TryFrom<ExprRange> for Quantifier {
     type Error = Error;
 
     fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
-        Ok(Self (
+        Ok(Self(
             value
                 .clone()
                 .from
-                .map_or(Ok(0), |from| usize_try_from_expr(*from))?..value.clone().to.map_or(Ok(usize::max_value()), |to| {
-                usize_try_from_expr(*to).map(|max| {
-                    max.saturating_sub(if let RangeLimits::HalfOpen(..) = value.limits {
-                        1
-                    } else {
-                        0
+                .map_or(Ok(0), |from| usize_try_from_expr(*from))?
+                ..value.clone().to.map_or(Ok(usize::max_value()), |to| {
+                    usize_try_from_expr(*to).map(|max| {
+                        max.saturating_sub(if let RangeLimits::HalfOpen(..) = value.limits {
+                            1
+                        } else {
+                            0
+                        })
                     })
-                })
-            })?
+                })?,
         ))
     }
 }
@@ -397,53 +383,37 @@ impl TryFrom<Lit> for Quantifier {
     type Error = Error;
 
     fn try_from(value: Lit) -> Result<Self, Self::Error> {
-        usize_try_from_lit(&value).map(|minimum| Self (
-            minimum..minimum
-        ))
+        usize_try_from_lit(&value).map(|minimum| Self(minimum..minimum))
     }
 }
 
-/// Parses the last `char` that is included in `range`.
-#[throws(Error)]
-fn parse_last_char(range: &ExprRange) -> char {
-    match &range.to {
-        None => LAST_CHAR,
-        Some(to) => {
-            let to_char = parse_char(*to.clone())?;
+fn parse_max(input: ParseStream<'_>, lookahead: Lookahead1<'_>) -> ParseResult<usize> {
+    let mut max = usize::max_value();
 
-            match range.limits {
-                RangeLimits::Closed(..) => to_char,
-                RangeLimits::HalfOpen(..) => {
-                    let end_code = u32::from(to_char);
+    if lookahead.peek(Token![..=]) {
+        let _: Token![..=] = input.parse()?;
 
-                    // Because end_code came from a char, FIRST_CHAR_AFTER_SURROGATES_VALUE is the only possible value that requires special handling.
-                    if end_code == FIRST_CHAR_AFTER_SURROGATES_VALUE {
-                        LAST_CHAR_BEFORE_SURROGATES
-                    } else {
-                        char::try_from(end_code.checked_sub(1).ok_or_else(|| {
-                            Error::new_spanned(to.clone(), "End bound cannot be exclusive 0")
-                        })?)
-                        .map_err(|_| Error::new_spanned(to, "Invalid value for exclusive range"))?
-                    }
-                }
-            }
+        if input.peek(LitInt) {
+            max = parse_usize(input)?;
         }
-    }
-}
 
-/// Converts `expr` into a [`char`].
-///
-/// Returns [`Err`] if `expr` is unable to be converted.
-fn parse_char(expr: Expr) -> ParseResult<char> {
-    if let Expr::Lit(literal) = expr {
-        if let Lit::Char(c) = literal.lit {
-            Ok(c.value())
-        } else {
-            Err(Error::new_spanned(literal, "Expected char literal"))
+        Ok(max)
+    } else if lookahead.peek(Token![..]) {
+        let _: Token![..] = input.parse()?;
+
+        if input.peek(LitInt) {
+            max = parse_usize(input).map(|max| max.saturating_sub(1))?
         }
+
+        Ok(max)
     } else {
-        Err(Error::new_spanned(expr, "Expected literal"))
+        Err(lookahead.error())
     }
+}
+
+fn parse_usize(input: ParseStream<'_>) -> ParseResult<usize> {
+    let int: LitInt = input.parse()?;
+    int.base10_parse()
 }
 
 /// Converts `lit` to a [`usize`].
