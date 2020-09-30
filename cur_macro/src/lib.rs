@@ -14,8 +14,8 @@ use {
         parse::{Lookahead1, Parse, ParseStream, Result as ParseResult},
         parse_macro_input,
         punctuated::Punctuated,
-        token, Ident, LitByte, LitByteStr, LitChar, LitInt, LitStr,
-        Path, PathArguments, PathSegment, Token, Visibility,
+        token, Ident, LitByte, LitByteStr, LitChar, LitInt, LitStr, Path, PathArguments,
+        PathSegment, Token, Visibility,
     },
 };
 
@@ -116,7 +116,7 @@ enum GameInput {
 
 impl GameInput {
     /// Returns an empty sequence.
-    fn empty() -> Self {
+    const fn empty() -> Self {
         Self::Sequence(vec![])
     }
 
@@ -136,8 +136,7 @@ impl Parse for GameInput {
             if content.is_empty() {
                 Ok(Self::empty())
             } else {
-                let steps: Punctuated<Self, Token![,]> =
-                    Punctuated::parse_terminated(&content)?;
+                let steps: Punctuated<Self, Token![,]> = Punctuated::parse_terminated(&content)?;
 
                 Ok(Self::Sequence(steps.into_iter().collect()))
             }
@@ -235,22 +234,26 @@ impl ToTokens for GameInput {
                     Game::Single(Scent::Range(#start, #end))
                 }
             }
-            Self::Sequence(games) => if games.is_empty() {
-                quote! {
-                    Game::Sequence(vec![])
-                }
-            } else if let (Some(game), None) = (games.get(0), games.get(1)) {
-                // games has only 1 game.
-                quote! {
-                    #game
-                }
-            } else {
-                #[allow(clippy::integer_arithmetic)] { // False positive.
+            Self::Sequence(games) => {
+                if games.is_empty() {
                     quote! {
-                        Game::Sequence(vec![#(#games.into_steps()),*].concat())
+                        Game::Sequence(vec![])
+                    }
+                } else if let (Some(game), None) = (games.get(0), games.get(1)) {
+                    // games has only 1 game.
+                    quote! {
+                        #game
+                    }
+                } else {
+                    #[allow(clippy::integer_arithmetic)]
+                    {
+                        // False positive.
+                        quote! {
+                            Game::Sequence(vec![#(#games.into_steps()),*].concat())
+                        }
                     }
                 }
-            },
+            }
             #[allow(clippy::integer_arithmetic)] // False positive.
             Self::Union(games) => {
                 quote! {
@@ -268,10 +271,7 @@ impl ToTokens for GameInput {
                 if quantifier.is_unlimited() {
                     games.push(Self::Star(game.clone()));
                 } else {
-                    games.extend(vec![
-                        game.clone().optional();
-                        quantifier.optional()
-                    ]);
+                    games.extend(vec![game.clone().optional(); quantifier.optional()]);
                 }
 
                 let sequence = Self::Sequence(games);
