@@ -1,6 +1,6 @@
 [package]
 name = "cur_macro"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["Justin Simerly <justinsimerly1992@gmail.com>"]
 edition = "2018"
 description = "Procedural macros for `cur`"
@@ -9,8 +9,6 @@ repository = "https://github.com/jsim2010/cur_macro"
 readme = "README.md"
 keywords = ["cur", "macro", "proc_macro"]
 categories = ["no-std"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 proc-macro2 = "1.0.0"
@@ -22,5 +20,3 @@ cur = { path = ".." }
 
 [lib]
 proc-macro = true
-# Required to make cargo-readme work; see https://github.com/livioribeiro/cargo-readme/issues/32.
-path = "src/lib.rs"
