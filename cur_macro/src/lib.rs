@@ -5,10 +5,7 @@ extern crate alloc;
 
 use {
     alloc::{boxed::Box, vec, vec::Vec},
-    core::{
-        convert::{TryFrom, TryInto},
-        ops::Range,
-    },
+    core::ops::Range,
     proc_macro::TokenStream,
     proc_macro2::TokenStream as TokenStream2,
     quote::{quote, ToTokens},
@@ -17,8 +14,8 @@ use {
         parse::{Lookahead1, Parse, ParseStream, Result as ParseResult},
         parse_macro_input,
         punctuated::Punctuated,
-        token, Error, Expr, ExprRange, Ident, Lit, LitByte, LitByteStr, LitChar, LitInt, LitStr,
-        Path, PathArguments, PathSegment, RangeLimits, Token, Visibility,
+        token, Ident, LitByte, LitByteStr, LitChar, LitInt, LitStr,
+        Path, PathArguments, PathSegment, Token, Visibility,
     },
 };
 
@@ -56,7 +53,9 @@ struct GameDef {
     vis: Visibility,
     /// The identifier of the `Game`.
     name: Ident,
+    /// The assignment operator.
     eq: Token![=],
+    /// The `Game`.
     game: GameInput,
 }
 
@@ -84,22 +83,47 @@ impl ToTokens for GameDef {
     }
 }
 
+/// Describes valid input from [`game!`].
 #[derive(Clone)]
 enum GameInput {
+    /// Matches the given `char`.
     Single(char),
+    /// Matches a single `char` within the 2 given `char`s.
     Range(char, char),
+    /// Matches the `Game`s given in sequence.
     Sequence(Vec<GameInput>),
+    /// Matches any one of the `Game`s in the order given.
     Union(Vec<GameInput>),
+    /// Associates `name` with `game`.
     Item {
+        /// The name of `game`.
         name: Ident,
+        /// The `Game` being named.
         game: Box<GameInput>,
     },
+    /// Matches a `Game` any number of times (including 0).
     Star(Box<GameInput>),
+    /// Repeats `game` as specified by `quantifier`.
     Repeat {
+        /// The `GameInput` to be repeated.
         game: Box<GameInput>,
+        /// Defines how often `game` will be repeated.
         quantifier: Quantifier,
     },
+    /// A path to a `Game`.
     Path(Path),
+}
+
+impl GameInput {
+    /// Returns an empty sequence.
+    fn empty() -> Self {
+        Self::Sequence(vec![])
+    }
+
+    /// Returns a [`Union`] of an empty sequence and `self`.
+    fn optional(self) -> Self {
+        Self::Union(vec![Self::empty(), self])
+    }
 }
 
 impl Parse for GameInput {
@@ -110,9 +134,9 @@ impl Parse for GameInput {
             let content;
             let _ = parenthesized!(content in input);
             if content.is_empty() {
-                Ok(Self::Sequence(vec![]))
+                Ok(Self::empty())
             } else {
-                let steps: Punctuated<GameInput, Token![,]> =
+                let steps: Punctuated<Self, Token![,]> =
                     Punctuated::parse_terminated(&content)?;
 
                 Ok(Self::Sequence(steps.into_iter().collect()))
@@ -131,7 +155,7 @@ impl Parse for GameInput {
         } else if lookahead.peek(LitStr) {
             let s: LitStr = input.parse()?;
             Ok(Self::Sequence(
-                s.value().chars().map(|c| Self::Single(c)).collect(),
+                s.value().chars().map(Self::Single).collect(),
             ))
         } else if lookahead.peek(LitByte) {
             let byte: LitByte = input.parse()?;
@@ -188,7 +212,7 @@ impl Parse for GameInput {
 
         if lookahead.peek(Token![?]) {
             let _: Token![?] = input.parse()?;
-            game.map(|g| Self::Union(vec![Self::Sequence(vec![]), g]))
+            game.map(Self::optional)
         } else if lookahead.peek(Token![|]) {
             let _: Token![|] = input.parse()?;
             game.and_then(|g| Ok(Self::Union(vec![g, input.parse()?])))
@@ -211,24 +235,23 @@ impl ToTokens for GameInput {
                     Game::Single(Scent::Range(#start, #end))
                 }
             }
-            Self::Sequence(games) => match games.len() {
-                0 => {
-                    quote! {
-                        Game::Sequence(vec![])
-                    }
+            Self::Sequence(games) => if games.is_empty() {
+                quote! {
+                    Game::Sequence(vec![])
                 }
-                1 => {
-                    let game = &games[0];
-                    quote! {
-                        #game
-                    }
+            } else if let (Some(game), None) = (games.get(0), games.get(1)) {
+                // games has only 1 game.
+                quote! {
+                    #game
                 }
-                _ => {
+            } else {
+                #[allow(clippy::integer_arithmetic)] { // False positive.
                     quote! {
                         Game::Sequence(vec![#(#games.into_steps()),*].concat())
                     }
                 }
             },
+            #[allow(clippy::integer_arithmetic)] // False positive.
             Self::Union(games) => {
                 quote! {
                     Game::Union(vec![#(#games.into_branches()),*].concat())
@@ -246,7 +269,7 @@ impl ToTokens for GameInput {
                     games.push(Self::Star(game.clone()));
                 } else {
                     games.extend(vec![
-                        Self::Union(vec![Self::Sequence(vec![]), *game.clone()]);
+                        game.clone().optional();
                         quantifier.optional()
                     ]);
                 }
@@ -277,7 +300,7 @@ struct Quantifier(Range<usize>);
 
 impl Quantifier {
     /// Returns the number of required repetitions specified by `self`.
-    fn required(&self) -> usize {
+    const fn required(&self) -> usize {
         self.0.start
     }
 
@@ -307,86 +330,9 @@ impl Parse for Quantifier {
     }
 }
 
-impl TryFrom<Expr> for Quantifier {
-    type Error = Error;
-
-    fn try_from(value: Expr) -> Result<Self, Self::Error> {
-        match value {
-            Expr::Lit(literal) => literal.lit.try_into(),
-            Expr::Range(range) => range.try_into(),
-            Expr::Try(..)
-            | Expr::Repeat(..)
-            | Expr::Path(..)
-            | Expr::Binary(..)
-            | Expr::Paren(..)
-            | Expr::Unary(..)
-            | Expr::Box(..)
-            | Expr::Await(..)
-            | Expr::Array(..)
-            | Expr::Call(..)
-            | Expr::MethodCall(..)
-            | Expr::Tuple(..)
-            | Expr::Cast(..)
-            | Expr::Let(..)
-            | Expr::If(..)
-            | Expr::While(..)
-            | Expr::ForLoop(..)
-            | Expr::Loop(..)
-            | Expr::Match(..)
-            | Expr::Closure(..)
-            | Expr::Unsafe(..)
-            | Expr::Block(..)
-            | Expr::Assign(..)
-            | Expr::AssignOp(..)
-            | Expr::Field(..)
-            | Expr::Index(..)
-            | Expr::Reference(..)
-            | Expr::Break(..)
-            | Expr::Continue(..)
-            | Expr::Return(..)
-            | Expr::Macro(..)
-            | Expr::Struct(..)
-            | Expr::Group(..)
-            | Expr::Async(..)
-            | Expr::TryBlock(..)
-            | Expr::Type(..)
-            | Expr::Yield(..)
-            | Expr::Verbatim(..)
-            | Expr::__Nonexhaustive => Err(Error::new_spanned(value, "expected literal or range")),
-        }
-    }
-}
-
-impl TryFrom<ExprRange> for Quantifier {
-    type Error = Error;
-
-    fn try_from(value: ExprRange) -> Result<Self, Self::Error> {
-        Ok(Self(
-            value
-                .clone()
-                .from
-                .map_or(Ok(0), |from| usize_try_from_expr(*from))?
-                ..value.clone().to.map_or(Ok(usize::max_value()), |to| {
-                    usize_try_from_expr(*to).map(|max| {
-                        max.saturating_sub(if let RangeLimits::HalfOpen(..) = value.limits {
-                            1
-                        } else {
-                            0
-                        })
-                    })
-                })?,
-        ))
-    }
-}
-
-impl TryFrom<Lit> for Quantifier {
-    type Error = Error;
-
-    fn try_from(value: Lit) -> Result<Self, Self::Error> {
-        usize_try_from_lit(&value).map(|minimum| Self(minimum..minimum))
-    }
-}
-
+/// Parses the maximum value of a range from `input`.
+///
+/// `lookahead` is the the [`Lookahead1`] of `input`.
 fn parse_max(input: ParseStream<'_>, lookahead: Lookahead1<'_>) -> ParseResult<usize> {
     let mut max = usize::max_value();
 
@@ -411,29 +357,8 @@ fn parse_max(input: ParseStream<'_>, lookahead: Lookahead1<'_>) -> ParseResult<u
     }
 }
 
+/// Parses a `usize` from `input`.
 fn parse_usize(input: ParseStream<'_>) -> ParseResult<usize> {
     let int: LitInt = input.parse()?;
     int.base10_parse()
-}
-
-/// Converts `lit` to a [`usize`].
-///
-/// [`Err`] indicates `lit` is unable to be converted.
-fn usize_try_from_lit(lit: &Lit) -> ParseResult<usize> {
-    if let Lit::Int(int) = lit {
-        int.base10_parse::<usize>()
-    } else {
-        Err(Error::new_spanned(lit, "Expected usize literal"))
-    }
-}
-
-/// Converts `expr` to a [`usize`].
-///
-/// [`Err`] indicates `expr` is unable to be converted.
-fn usize_try_from_expr(expr: Expr) -> ParseResult<usize> {
-    if let Expr::Lit(literal) = expr {
-        usize_try_from_lit(&literal.lit)
-    } else {
-        Err(Error::new_spanned(expr, "Expected literal"))
-    }
 }

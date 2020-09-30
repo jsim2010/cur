@@ -61,19 +61,6 @@ pub enum Branch {
     Item(&'static str, Box<Game>),
 }
 
-impl From<Game> for Vec<Branch> {
-    #[inline]
-    fn from(game: Game) -> Self {
-        match game {
-            Game::Single(scent) => vec![Branch::Single(scent)],
-            Game::Union(branches) => branches,
-            Game::Sequence(steps) => vec![Branch::Sequence(steps)],
-            Game::Repetition(pattern) => vec![Branch::Repetition(pattern)],
-            Game::Item(name, game) => vec![Branch::Item(name, game)],
-        }
-    }
-}
-
 /// A game that is part of a sequence.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Step {
@@ -100,19 +87,6 @@ pub enum Pattern {
     Item(&'static str, Box<Game>),
 }
 
-impl From<Game> for Pattern {
-    #[inline]
-    fn from(game: Game) -> Self {
-        match game {
-            Game::Single(scent) => Self::Single(scent),
-            Game::Union(branches) => Self::Union(branches),
-            Game::Sequence(steps) => Self::Sequence(steps),
-            Game::Repetition(pattern) => pattern,
-            Game::Item(name, g) => Self::Item(name, g),
-        }
-    }
-}
-
 /// Signifies a desired pattern of `char`s.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Game {
@@ -136,6 +110,8 @@ pub enum Game {
 
 impl Game {
     /// Converts `self` into [`Branch`]es.
+    #[inline]
+    #[must_use]
     pub fn into_branches(self) -> Vec<Branch> {
         match self {
             Self::Single(scent) => vec![Branch::Single(scent)],
@@ -148,6 +124,8 @@ impl Game {
 
     /// Converts `self` into a [`Pattern`].
     #[allow(clippy::missing_const_for_fn)] // False positive.
+    #[inline]
+    #[must_use]
     pub fn into_pattern(self) -> Pattern {
         match self {
             Self::Single(scent) => Pattern::Single(scent),
