@@ -25,7 +25,7 @@ use {
 /// use this procedural macro to build a `Game` using valid rust syntax that is easily
 /// understandable.
 ///
-/// Calling this procedural macro will create a constant with the given visibility and name. The type of the constant shall be a `Lazy<Game>`, which allows for operations that are not const to be evaluated after compilation.
+/// Calling this procedural macro will create a static with the given visibility and name. The type of the static shall be a `Lazy<Game>`, which allows for operations that are not const to be evaluated after compilation.
 ///
 /// The format of the macro input shall be `Visibility AssignmentExpression`. The value expression of the assignment expression shall be a game expression.
 ///
@@ -78,7 +78,7 @@ impl ToTokens for GameDef {
         let game = &self.game;
 
         tokens.extend(quote! {
-            #vis const #name: Lazy<Game> #eq Lazy::new(|| #game);
+            #vis static #name: Lazy<Game> #eq Lazy::new(|| #game);
         });
     }
 }

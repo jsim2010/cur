@@ -87,6 +87,19 @@ pub enum Pattern {
     Item(&'static str, Box<Game>),
 }
 
+/// Defines an item that is able to be converted into a [`Game`].
+pub trait Gamey {
+    /// Converts `self` into [`Step`]s.
+    fn into_steps(self) -> Vec<Step>;
+}
+
+impl Gamey for &str {
+    #[inline]
+    fn into_steps(self) -> Vec<Step> {
+        self.chars().map(|c| Step::Single(Scent::from(c))).collect()
+    }
+}
+
 /// Signifies a desired pattern of `char`s.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Game {
@@ -135,11 +148,12 @@ impl Game {
             Self::Item(name, game) => Pattern::Item(name, game),
         }
     }
+}
 
-    /// Converts `self` into [`Step`]s.
+impl Gamey for Game {
     #[inline]
     #[must_use]
-    pub fn into_steps(self) -> Vec<Step> {
+    fn into_steps(self) -> Vec<Step> {
         match self {
             Self::Single(scent) => vec![Step::Single(scent)],
             Self::Union(branches) => vec![Step::Union(branches)],

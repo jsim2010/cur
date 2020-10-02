@@ -1,6 +1,7 @@
 use cur::*;
 
 game!(DIGIT = '0'..='9');
+const NEWLINE: &str = "\r\n";
 
 mod scents {
     use super::*;
@@ -8,7 +9,6 @@ mod scents {
     game!(pub LOWERCASE = 'a'..='z');
 }
 
-// Processing::game_pattern_syntax[path]
 #[test]
 fn copy() {
     game!(COPY = DIGIT);
@@ -16,7 +16,6 @@ fn copy() {
     assert_eq!(*COPY, Game::Single(Scent::Range('0', '9')));
 }
 
-// Processing::game_pattern_syntax[path]
 #[test]
 fn path() {
     game!(LOWERCASE = scents::LOWERCASE);
@@ -38,7 +37,6 @@ fn union() {
     );
 }
 
-// Processing::game_pattern_syntax[sequence]
 #[test]
 fn sequence() {
     game!(DIGIT_AND_A = (DIGIT, 'a'));
@@ -52,7 +50,6 @@ fn sequence() {
     );
 }
 
-// Processing::game_pattern_syntax[try]
 #[test]
 fn option() {
     game!(OPTIONAL_DIGIT = DIGIT?);
@@ -66,7 +63,6 @@ fn option() {
     );
 }
 
-// Processing::game_pattern_syntax[repeat[any]]
 #[test]
 fn repetition() {
     game!(ZERO_OR_MORE_LOWERCASE = [scents::LOWERCASE; ..]);
@@ -77,7 +73,6 @@ fn repetition() {
     );
 }
 
-// Processing::game_pattern_syntax[name]
 #[test]
 fn name() {
     game!(MYDIGIT = mine @ DIGIT);
@@ -85,5 +80,19 @@ fn name() {
     assert_eq!(
         *MYDIGIT,
         Game::Item("mine", Box::new(Game::Single(Scent::Range('0', '9')))),
+    );
+}
+
+#[test]
+fn literal() {
+    game!(LINE = ([_; ..], NEWLINE));
+
+    assert_eq!(
+        *LINE,
+        Game::Sequence(vec![
+            Step::Repetition(Pattern::Single(Scent::Range('\u{0}', '\u{10ffff}'))),
+            Step::Single(Scent::Char('\r')),
+            Step::Single(Scent::Char('\n')),
+        ])
     );
 }
