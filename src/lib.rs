@@ -20,7 +20,7 @@ pub enum Failure {
     InvalidRange,
 }
 
-/// Signifies a desired `char`.
+/// Matches a single [`char`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Scent {
     /// Matches a single `char` equal to the one given.
@@ -87,37 +87,37 @@ pub enum Pattern {
     Item(&'static str, Box<Game>),
 }
 
-/// Defines an item that is able to be converted into a [`Game`].
-pub trait Gamey {
+/// An item that can be converted into [`Vec`] of [`Step`]s.
+pub trait Stepable {
     /// Converts `self` into [`Step`]s.
     fn into_steps(self) -> Vec<Step>;
 }
 
-impl Gamey for &str {
+impl Stepable for &str {
     #[inline]
     fn into_steps(self) -> Vec<Step> {
         self.chars().map(|c| Step::Single(Scent::from(c))).collect()
     }
 }
 
-/// Signifies a desired pattern of `char`s.
+/// Signifies a desired pattern of [`char`]s.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Game {
-    /// Matches a single `char` as described by the given `Scent`.
+    /// Matches a single [`char`] as described by the given [`Scent`].
     Single(Scent),
-    /// Matches any of the given `Branch`es.
+    /// Matches any of the given [`Branch`]es.
     ///
-    /// Matches are attempted in the order of the given `Branch`es.
+    /// Matches are attempted in the order of the given [`Branch`]es.
     Union(Vec<Branch>),
-    /// Matches each of the given `Step`s in order.
+    /// Matches each of the given [`Step`]s in order.
     ///
-    /// An empty slice matches an empty sequence of `char`s.
+    /// An empty [`Vec`] matches an empty sequence of [`char`]s.
     Sequence(Vec<Step>),
-    /// Matches any number of repetitions of the given `Pattern`.
+    /// Matches any number of repetitions of the given [`Pattern`].
     ///
-    /// Matches are attempted starting with 0 repetitions (an empty slice) and incrementing as high as possible.
+    /// Matches are attempted starting with 0 repetitions (an empty sequence) and incrementing as high as possible.
     Repetition(Pattern),
-    /// Matches the given `Game` that is associated with the given `&str`
+    /// Matches the given [`Game`] and associates it with the given [`&str`]
     Item(&'static str, Box<Game>),
 }
 
@@ -150,7 +150,7 @@ impl Game {
     }
 }
 
-impl Gamey for Game {
+impl Stepable for Game {
     #[inline]
     #[must_use]
     fn into_steps(self) -> Vec<Step> {
