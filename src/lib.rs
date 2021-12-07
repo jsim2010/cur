@@ -1,514 +1,378 @@
-//! cur - Your unicode regular expression hunting companion.
+//! cur - Your unicode pattern hunting companion.
+//!
+//! This module provides a [`Cur`], which can determine if a pattern known as an [`Odor`] matches a
+//! unicode string known as the "search". [`Odor`]s can "mark" any number of parts of their pattern
+//! with [`Name`]s. For each match that a [`Cur`] finds, it can return a [`Catch`] that has
+//! location information known as a [`Find`] for each of the marks of the [`Odor`].
+//!
+//! # Examples
+//! ```
+//! use cur::*;
+//!
+//! // Define an Odor.
+//! odor!(HELLO_WORLD = ["Hello ", .. as name, '!']);
+//!
+//! // Create a Cur that will hunt for the Odor.
+//! let mut cur = Cur::new(&HELLO_WORLD);
+//!
+//! // Set the search to be hunted.
+//! cur.set_search("Hello Bob!");
+//!
+//! // Execute the hunt by requesting information from the Cur.
+//! assert!(!cur.is_clear());
+//!
+//! // The Cur iterates on the Catch found.
+//! if let Some(catch) = cur.next() {
+//!     assert_eq!(catch.get("name").map(Find::as_str), Some("Bob"));
+//! } else {
+//!     panic!("Cur did not find catch");
+//! }
+//! ```
 #![no_std]
 
 extern crate alloc;
 
-pub use {cur_macro::game, once_cell::sync::Lazy};
+mod hunt;
+mod pattern;
 
-use {
-    alloc::{boxed::Box, collections::BTreeMap, vec, vec::Vec},
-    core::{
-        ops::{BitOr, Range},
-        str::Chars,
-    },
+pub use {
+    cur_macro::odor,
+    hunt::Find,
+    once_cell::sync::Lazy,
+    pattern::{MultipleOdors, Odor, Scent},
 };
 
-/// A failure.
-#[derive(Clone, Copy, Debug)]
-pub enum Failure {
-    /// Range of Spots was invalid.
-    InvalidRange,
+use {
+    alloc::vec::Vec,
+    core::{
+        convert::{TryFrom, TryInto},
+        mem,
+    },
+    hunt::{Catch, Fork, ForkKind, Haul, Progress},
+    log::trace,
+    pattern::{Odors, Scents},
+};
+
+/// An error thrown when attmepting to get the a [`Catch`] from [`NextCatch::Unknown`].
+struct UnknownNextCatch;
+
+/// Holds the result from attempting to find a catch.
+///
+/// `'s` is the lifetime of the search.
+#[derive(Debug)]
+enum NextCatch<'s> {
+    /// The attempt found the given [`Catch`].
+    Success(Catch<'s>),
+    /// The attempt found no [`Catch`]es.
+    NonSuccess,
+    /// No atttempt was made.
+    Unknown,
 }
 
-/// Matches a single [`char`].
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Scent {
-    /// Matches a single `char` equal to the one given.
-    Char(char),
-    /// Matches a single `char` equal to or in between the two given.
-    Range(char, char),
+impl<'s> NextCatch<'s> {
+    /// Returns if `self` is unknown.
+    const fn is_unknown(&self) -> bool {
+        matches!(*self, Self::Unknown)
+    }
+
+    /// Returns if `self` is a success.
+    const fn is_success(&self) -> bool {
+        matches!(*self, Self::Success(..))
+    }
+
+    /// Updates `self` to hold `catch`.
+    fn update(&mut self, catch: Option<Catch<'s>>) {
+        *self = match catch {
+            Some(success) => Self::Success(success),
+            None => Self::NonSuccess,
+        };
+    }
+
+    /// Takes `self`, replacing it with `Self::default()`.
+    fn take(&mut self) -> Self {
+        mem::take(self)
+    }
 }
 
-impl Scent {
-    /// Returns if `self` matches `ch`.
-    #[inline]
-    #[must_use]
-    pub fn is_match(&self, ch: char) -> bool {
-        match *self {
-            Self::Char(c) => c == ch,
-            Self::Range(begin, end) => (begin..=end).contains(&ch),
+impl<'s> Default for NextCatch<'s> {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+impl<'s> TryFrom<NextCatch<'s>> for Option<Catch<'s>> {
+    type Error = UnknownNextCatch;
+
+    fn try_from(next_catch: NextCatch<'s>) -> Result<Self, Self::Error> {
+        match next_catch {
+            NextCatch::Success(catch) => Ok(Some(catch)),
+            NextCatch::NonSuccess => Ok(None),
+            NextCatch::Unknown => Err(UnknownNextCatch),
         }
     }
 }
 
-impl From<char> for Scent {
-    #[inline]
-    fn from(c: char) -> Self {
-        Self::Char(c)
-    }
-}
-
-/// A game that is part of a union.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Branch {
-    /// A single scent.
-    Single(Scent),
-    /// A sequence.
-    Sequence(Vec<Step>),
-    /// A repeated game.
-    Repetition(Pattern),
-    /// A named game.
-    Item(&'static str, Box<Game>),
-}
-
-/// A game that is part of a sequence.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Step {
-    /// A single scent.
-    Single(Scent),
-    /// A union.
-    Union(Vec<Branch>),
-    /// A repeated game.
-    Repetition(Pattern),
-    /// A named game.
-    Item(&'static str, Box<Game>),
-}
-
-/// A game to repeat any number of times.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Pattern {
-    /// A scent.
-    Single(Scent),
-    /// A union.
-    Union(Vec<Branch>),
-    /// A sequence.
-    Sequence(Vec<Step>),
-    /// A named game.
-    Item(&'static str, Box<Game>),
-}
-
-/// An item that can be converted into [`Vec`] of [`Step`]s.
-pub trait Stepable {
-    /// Converts `self` into [`Step`]s.
-    fn into_steps(self) -> Vec<Step>;
-}
-
-impl Stepable for &str {
-    #[inline]
-    fn into_steps(self) -> Vec<Step> {
-        self.chars().map(|c| Step::Single(Scent::from(c))).collect()
-    }
-}
-
-/// Signifies a desired pattern of [`char`]s.
-#[derive(Clone, Debug, PartialEq)]
-pub enum Game {
-    /// Matches a single [`char`] as described by the given [`Scent`].
-    Single(Scent),
-    /// Matches any of the given [`Branch`]es.
+/// The state of a [`Trail`] when a [`Fork`] starts.
+#[derive(Debug)]
+struct Junction<'s, 'o> {
+    /// The [`Haul`] of the [`Trail`] before the [`Junction`].
     ///
-    /// Matches are attempted in the order of the given [`Branch`]es.
-    Union(Vec<Branch>),
-    /// Matches each of the given [`Step`]s in order.
+    /// # Safety
     ///
-    /// An empty [`Vec`] matches an empty sequence of [`char`]s.
-    Sequence(Vec<Step>),
-    /// Matches any number of repetitions of the given [`Pattern`].
+    /// Must not be changed once initialized.
+    prev_haul: Haul<'s>,
+    /// The [`Odors`].
+    odors: Odors<'o>,
+    /// The [`Fork`].
+    fork: Fork<'s>,
+    /// The [`Trail`] of the [`Fork`] currently being hunted.
     ///
-    /// Matches are attempted starting with 0 repetitions (an empty sequence) and incrementing as high as possible.
-    Repetition(Pattern),
-    /// Matches the given [`Game`] and associates it with the given [`&str`]
-    Item(&'static str, Box<Game>),
+    /// # Safety
+    ///
+    /// The search of `fork_trail` must equal `prev_haul.remaining_str()`.
+    fork_trail: Option<Trail<'s, 'o>>,
 }
 
-impl Game {
-    /// Converts `self` into [`Branch`]es.
-    #[inline]
-    #[must_use]
-    pub fn into_branches(self) -> Vec<Branch> {
-        match self {
-            Self::Single(scent) => vec![Branch::Single(scent)],
-            Self::Union(branches) => branches,
-            Self::Sequence(steps) => vec![Branch::Sequence(steps)],
-            Self::Repetition(pattern) => vec![Branch::Repetition(pattern)],
-            Self::Item(name, game) => vec![Branch::Item(name, game)],
-        }
-    }
-
-    /// Converts `self` into a [`Pattern`].
-    #[allow(clippy::missing_const_for_fn)] // False positive.
-    #[inline]
-    #[must_use]
-    pub fn into_pattern(self) -> Pattern {
-        match self {
-            Self::Single(scent) => Pattern::Single(scent),
-            Self::Union(branches) => Pattern::Union(branches),
-            Self::Sequence(steps) => Pattern::Sequence(steps),
-            Self::Repetition(pattern) => pattern,
-            Self::Item(name, game) => Pattern::Item(name, game),
+impl<'s, 'o> Junction<'s, 'o> {
+    /// Creates a new [`Junction`].
+    fn new(prev_haul: Haul<'s>, mut odors: Odors<'o>, fork_kind: ForkKind) -> Self {
+        let odor = odors.next();
+        let mut fork = Fork::new(Progress::from(prev_haul.remaining_str()), fork_kind);
+        Self {
+            // SAFETY: Safety conditions of `Fork::next()` guarantee the search of `self.fork_trail` starts at `self.prev_haul.remaining_str()`.
+            fork_trail: odor
+                .and_then(|odor| fork.next().map(|progress| Trail::new(progress, odor))),
+            odors,
+            prev_haul,
+            fork,
         }
     }
 }
 
-impl Stepable for Game {
-    #[inline]
-    #[must_use]
-    fn into_steps(self) -> Vec<Step> {
-        match self {
-            Self::Single(scent) => vec![Step::Single(scent)],
-            Self::Union(branches) => vec![Step::Union(branches)],
-            Self::Sequence(steps) => steps,
-            Self::Repetition(pattern) => vec![Step::Repetition(pattern)],
-            Self::Item(name, game) => vec![Step::Item(name, game)],
-        }
-    }
-}
-
-impl BitOr for Game {
-    type Output = Self;
-
-    #[inline]
-    fn bitor(self, rhs: Self) -> Self::Output {
-        let mut branches = self.into_branches();
-        branches.append(&mut rhs.into_branches());
-        Self::Union(branches)
-    }
-}
-
-impl From<char> for Game {
-    #[inline]
-    fn from(c: char) -> Self {
-        Self::Single(Scent::Char(c))
-    }
-}
-
-impl From<u8> for Game {
-    #[inline]
-    fn from(value: u8) -> Self {
-        Self::from(char::from(value))
-    }
-}
-
-impl From<Branch> for Game {
-    #[inline]
-    fn from(branch: Branch) -> Self {
-        match branch {
-            Branch::Single(scent) => Self::Single(scent),
-            Branch::Sequence(steps) => Self::Sequence(steps),
-            Branch::Repetition(pattern) => Self::Repetition(pattern),
-            Branch::Item(name, game) => Self::Item(name, game),
-        }
-    }
-}
-
-impl From<Pattern> for Game {
-    #[inline]
-    fn from(pattern: Pattern) -> Self {
-        match pattern {
-            Pattern::Single(scent) => Self::Single(scent),
-            Pattern::Union(branches) => Self::Union(branches),
-            Pattern::Sequence(pattern) => Self::Sequence(pattern),
-            Pattern::Item(name, game) => Self::Item(name, game),
-        }
-    }
-}
-
-impl From<Step> for Game {
-    #[inline]
-    fn from(step: Step) -> Self {
-        match step {
-            Step::Single(scent) => Self::Single(scent),
-            Step::Union(branches) => Self::Union(branches),
-            Step::Repetition(pattern) => Self::Repetition(pattern),
-            Step::Item(name, game) => Self::Item(name, game),
-        }
-    }
-}
-
-/// Iterates over a sequence of `char`s while tracking how far it has traveled.
-#[derive(Clone, Debug)]
-struct Spot<'l> {
-    /// An `Iterator` over the remaining `char`s.
-    chars: Chars<'l>,
-    /// The number of bytes that the `Spot` has traveled.
-    len: usize,
-}
-
-impl<'l> Spot<'l> {
-    /// Returns if `self` has no more `char`s.
-    fn has_no_more(mut self) -> bool {
-        self.chars.next().is_none()
-    }
-}
-
-impl<'l> From<&'l str> for Spot<'l> {
-    fn from(value: &'l str) -> Self {
-        Spot {
-            chars: value.chars(),
-            len: 0,
-        }
-    }
-}
-
-impl<'l> Iterator for Spot<'l> {
-    type Item = char;
+impl<'s, 'o> Iterator for Junction<'s, 'o> {
+    type Item = Haul<'s>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut item = self.chars.next();
+        let mut haul = None;
 
-        // Update self.len.
-        if let Some(c) = item {
-            if let Some(len) = self.len.checked_add(c.len_utf8()) {
-                self.len = len;
-            } else {
-                item = None;
+        while let Some(ref mut trail) = self.fork_trail {
+            haul = trail.next().map(|fork_haul| {
+                // Safety conditions of `self.fork_trail` and `self.prev_haul` guarantee safety.
+                self.fork.process_haul(&fork_haul);
+                let mut my_haul = self.prev_haul.clone();
+
+                #[allow(unsafe_code)]
+                // Safety conditions of `self.fork_trail` and `self.prev_haul` guarantee safety.
+                unsafe {
+                    my_haul.append(fork_haul);
+                }
+
+                my_haul
+            });
+
+            if haul.is_some() {
+                break;
             }
+
+            // SAFETY: Safety conditions of `Fork::next()` guarantee the search of `self.fork_trail` starts at `self.prev_haul.remaining_str()`.
+            self.fork_trail = self
+                .odors
+                .next()
+                .and_then(|odor| self.fork.next().map(|progress| Trail::new(progress, odor)));
         }
 
-        item
+        haul
     }
 }
 
-/// Signifies a match of a `Game` with a `&str`.
-#[derive(Clone, Debug)]
-pub struct Find<'l> {
-    /// The text of the match.
-    text: &'l str,
-    /// The index, in bytes, that marks the inclusive start of the match.
-    start: usize,
-    /// The index, in bytes, that marks the non-inclusive end of the match.
-    finish: usize,
+/// Iterates hunting [`Haul`]s that match an [`Odor`] to a given search.
+///
+/// `'s` is the lifetime of the search. `'o` is the lifetime of the [`Odor`].
+#[derive(Debug)]
+struct Trail<'s, 'o> {
+    /// The current [`Haul`].
+    haul: Haul<'s>,
+    /// The [`Odor`] being hunted.
+    odor: &'o Odor,
+    /// The [`Junction`]s that were passed through on the latest hunt along with the [`Scents`]
+    /// that follow them.
+    junctions: Vec<(Junction<'s, 'o>, Scents<'o>)>,
+    /// If the search has been hunted at least once.
+    has_hunted: bool,
 }
 
-impl<'l> Find<'l> {
-    /// Creates a new `Find`.
-    fn new(range: Range<Spot<'l>>) -> Option<Self> {
-        let start = range.start.len;
-        let finish = range.end.len;
+impl<'s, 'o> Trail<'s, 'o> {
+    /// Creates a new [`Trail`].
+    fn new(progress: Progress<'s>, odor: &'o Odor) -> Self {
+        Self {
+            haul: Haul::from(progress),
+            odor,
+            junctions: Vec::new(),
+            has_hunted: false,
+        }
+    }
 
-        finish.checked_sub(start).and_then(|len| {
-            range.start.chars.as_str().get(..len).map(|text| Self {
-                start,
-                finish,
-                text,
-            })
+    /// Returns the success of hunting for `junction` in the remaining search.
+    fn hunt_junction(&mut self, mut junction: Junction<'s, 'o>, scents: &Scents<'o>) -> bool {
+        junction.next().map_or(false, |haul| {
+            self.haul = haul;
+            self.junctions.push((junction, scents.clone()));
+            true
         })
     }
 
-    /// Returns the first index of the match.
-    #[inline]
-    #[must_use]
-    pub const fn start(&self) -> usize {
-        self.start
+    /// Returns if the next [`char`] in the search is in between `begin` and `end`.
+    fn is_next_char_in_range(&mut self, begin: char, end: char) -> bool {
+        self.haul
+            .next_char()
+            .map_or(false, |c| (begin..=end).contains(&c))
     }
 
-    /// Returns the first index after the match.
-    #[inline]
-    #[must_use]
-    pub const fn finish(&self) -> usize {
-        self.finish
+    /// Returns the success of hunting for `scent` in the remaining search.
+    fn hunt_scent(&mut self, scent: &'o Scent, remaining_scents: &Scents<'o>) -> bool {
+        match *scent {
+            Scent::Char(ch) => self.haul.next_char() == Some(ch),
+            Scent::Range(begin, end) => self.is_next_char_in_range(begin, end),
+            Scent::Union(ref branches) => self.hunt_junction(
+                Junction::new(
+                    self.haul.clone(),
+                    Odors::list(branches.into_iter()),
+                    ForkKind::Stationary,
+                ),
+                remaining_scents,
+            ),
+            Scent::Repetition(ref pattern) => self.hunt_junction(
+                Junction::new(
+                    self.haul.clone(),
+                    Odors::repeat_after_empty(pattern),
+                    ForkKind::Growing,
+                ),
+                remaining_scents,
+            ),
+            Scent::Marked(ref odor) => self.hunt_junction(
+                Junction::new(self.haul.clone(), Odors::single(odor), ForkKind::Stationary),
+                remaining_scents,
+            ),
+        }
+    }
+
+    /// Returns the success of hunting for `scents` in the remaining search.
+    ///
+    /// The [`Haul`] of the entire trail is stored in `self.haul`. Any [`Junction`]s that are found
+    /// are pushed to `self.junctions`.
+    fn hunt_through_scents(&mut self, mut scents: Scents<'o>) -> bool {
+        trace!("Searching '{:#?}' for {:#?}", self.haul, scents);
+
+        while let Some(scent) = scents.next() {
+            if !(self.hunt_scent(scent, &scents)) {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Returns the success of hunting a new [`Haul`] from the stored [`Junction`]s.
+    ///
+    /// The [`Haul`] of the entire trail is stored in `self.haul`. If a [`Haul`] exists,
+    /// `self.junctions` is updated to match it. Otherwise, `self.junctions` will be empty.
+    fn rehunt_from_junctions(&mut self) -> bool {
+        while let Some((junction, scents)) = self.junctions.pop() {
+            if self.hunt_junction(junction, &scents) && self.hunt_through_scents(scents) {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    /// Returns the success of hunting for a [`Haul`].
+    fn hunt(&mut self) -> bool {
+        let success = if self.has_hunted {
+            self.rehunt_from_junctions()
+        } else {
+            self.has_hunted = true;
+            self.hunt_through_scents(self.odor.scents()) || self.rehunt_from_junctions()
+        };
+
+        if success {
+            if let Some(name) = self.odor.name() {
+                self.haul.identify_as(name);
+            }
+        }
+
+        success
     }
 }
 
-impl<'l> AsRef<str> for Find<'l> {
-    #[inline]
-    fn as_ref(&self) -> &str {
-        self.text
+impl<'s, 'o> Iterator for Trail<'s, 'o> {
+    type Item = Haul<'s>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.hunt().then(|| self.haul.clone())
     }
 }
 
-/// Maps `Find`s to an identifier.
-// TODO: Possibly make the value be an Iterator of Find.
-pub type Captures<'l, 'c> = BTreeMap<&'c str, Vec<Find<'l>>>;
-
-/// Signifies a match of a [`Game`], where all inner [`Game::Item`]s are stored within
-// TODO: Review the efficiency of Catch.
+/// Hunts for a match of an [`Odor`] on a given search.
+///
+/// '`s' is the lifetime of the search. '`o' is the lifetime of the [`Odor`].
 #[derive(Debug)]
-pub struct Catch<'l, 'c> {
-    /// The [`Find`] over the original [`Game`].
-    find: Find<'l>,
-    /// An map that associates names with [`Find`]s
-    captures: Captures<'l, 'c>,
+pub struct Cur<'s, 'o> {
+    /// The [`Odor`] being hunted.
+    odor: &'o Odor,
+    /// The [`Trail`] of the most recent search.
+    trail: Trail<'s, 'o>,
+    /// The [`NextCatch`]
+    next_catch: NextCatch<'s>,
 }
 
-impl<'l, 'c> Catch<'l, 'c> {
-    /// Creates a new `Catch`.
-    const fn new(find: Find<'l>, captures: Captures<'l, 'c>) -> Self {
-        Self { find, captures }
+impl<'s, 'o> Cur<'s, 'o> {
+    /// Creates a new [`Cur`] that will hunt `odor`.
+    #[must_use]
+    pub fn new(odor: &'o Odor) -> Self {
+        Self {
+            trail: Trail::new(Progress::from(""), odor),
+            odor,
+            next_catch: NextCatch::Unknown,
+        }
     }
 
-    /// Returns the first index of the match with [`Game`].
-    #[inline]
-    #[must_use]
-    pub const fn start(&self) -> usize {
-        self.find.start()
+    /// Sets the search `self` will hunt to `search`.
+    pub fn set_search(&mut self, search: &'s str) {
+        self.trail = Trail::new(Progress::from(search), self.odor);
+        self.next_catch = NextCatch::Unknown;
     }
 
-    /// Returns the first index after the match with [`Game`].
-    #[inline]
-    #[must_use]
-    pub const fn finish(&self) -> usize {
-        self.find.finish()
-    }
+    /// Returns if `self` cannot find any more matches of its [`Odor`].
+    ///
+    /// If a match is found, it will be returned by the next call of `self.next()`.
+    pub fn is_clear(&mut self) -> bool {
+        if self.next_catch.is_unknown() {
+            let next_catch = self.next();
+            self.next_catch.update(next_catch);
+        }
 
-    /// Returns the [`&str`] that matched the [`Game`].
-    #[inline]
-    #[must_use]
-    pub fn as_str(&self) -> &str {
-        self.find.as_ref()
-    }
-
-    /// Returns the list of [`Find`]s identified by `id`.
-    #[inline]
-    #[must_use]
-    pub fn get(&self, id: &str) -> Option<Vec<Find<'l>>> {
-        self.captures.get(id).cloned()
+        !self.next_catch.is_success()
     }
 }
 
-/// Returns [`Iterator`] of all finish [`Spot`]s that match `game` beginning from `start`.
-// TODO: Currently returned Iterator is greedy, i.e. all processing is performed prior to
-// returning Iterator. Ideally, this should be lazy such that processing only occurs at the time
-// each Item is requested.
-fn hunt<'l, 'c>(
-    game: Game,
-    mut start: Spot<'l>,
-    captures: &mut Captures<'l, 'c>,
-) -> impl Iterator<Item = Spot<'l>> + Clone {
-    let mut finishes = Vec::new();
+impl<'s, 'o> Iterator for Cur<'s, 'o> {
+    type Item = Catch<'s>;
 
-    match game {
-        Game::Single(scent) => {
-            if let Some(c) = start.next() {
-                if scent.is_match(c) {
-                    finishes.push(start);
-                }
-            }
-        }
-        Game::Union(branches) => {
-            finishes.extend(
-                branches
-                    .iter()
-                    .flat_map(|branch| hunt(Game::from(branch.clone()), start.clone(), captures)),
-            );
-        }
-        Game::Sequence(elements) => {
-            finishes.push(start);
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Ok(catch) = self.next_catch.take().try_into() {
+            catch
+        } else {
+            let mut catch = None;
 
-            for element in &elements {
-                // Reset finishes with each iteration because all elements of a sequence must match.
-                let new_starts: Vec<Spot<'l>> = finishes.drain(..).collect();
-
-                for new_start in new_starts {
-                    finishes.extend(hunt(Game::from(element.clone()), new_start, captures));
-                }
-            }
-        }
-        Game::Repetition(game) => {
-            let mut new_starts = vec![start.clone()];
-            // A repetition of zero is always a match.
-            finishes.push(start);
-
-            loop {
-                let new_finishes: Vec<Spot<'l>> = new_starts
-                    .drain(..)
-                    .flat_map(|new_start| hunt(Game::from(game.clone()), new_start, captures))
-                    .collect();
-
-                if new_finishes.is_empty() {
-                    // No match found; reached end of Repetition.
+            for mut haul in &mut self.trail {
+                if haul.matches_finish() {
+                    catch = Some(haul.take_catch());
                     break;
-                } else {
-                    finishes.extend(new_finishes.clone());
-                    new_starts = new_finishes;
                 }
             }
+
+            catch
         }
-        Game::Item(id, game) => {
-            let item_finishes = hunt(*game, start.clone(), captures);
-
-            // TODO: Determine how to handle the possibility of multiple matches with id.
-            if captures
-                .insert(
-                    id,
-                    item_finishes
-                        .clone()
-                        .filter_map(|finish| Find::new(start.clone()..finish))
-                        .collect(),
-                )
-                .is_some()
-            {
-                panic!("attempted to assign `Find` to `id` that was already assigned");
-            }
-
-            finishes.extend(item_finishes);
-        }
-    }
-
-    finishes.into_iter()
-}
-
-/// Searches for sequences of `char`s that match its respective [`Game`].
-#[derive(Clone, Debug)]
-pub struct Cur<'a> {
-    /// The [`Game`] to be hunted.
-    game: &'a Game,
-}
-
-impl<'a> Cur<'a> {
-    /// Creates a [`Cur`] that will hunt for `game`.
-    #[inline]
-    #[must_use]
-    pub const fn new(game: &'a Game) -> Self {
-        Self { game }
-    }
-
-    /// Returns if `land` matches the [`Game`] `self` is hunting.
-    #[inline]
-    #[must_use]
-    pub fn is_game(&self, land: &str) -> bool {
-        hunt(self.game.clone(), Spot::from(land), &mut Captures::new()).any(Spot::has_no_more)
-    }
-
-    /// Returns the first [`Find`] that matches the [`Game`] `self` is hunting starting from each consecutive [`Spot`] of `land`.
-    ///
-    /// [`None`] indicates the [`Game`] cannot be detected starting from any index in `land`.
-    #[inline]
-    #[must_use]
-    pub fn find<'l>(&self, land: &'l str) -> Option<Find<'l>> {
-        self.catch(land).map(|catch| catch.find)
-    }
-
-    /// Returns the first [`Catch`] that matches the [`Game`] of `self` starting from each consecutive [`Spot`] of `land`.
-    ///
-    /// [`None`] indicates the [`Game`] does not match starting from any index in `land`.
-    #[inline]
-    #[must_use]
-    pub fn catch<'l, 'c>(&self, land: &'l str) -> Option<Catch<'l, 'c>> {
-        let mut start = Spot::from(land);
-        let mut captures = Captures::new();
-
-        loop {
-            if let Some(finish) = hunt(self.game.clone(), start.clone(), &mut captures).next() {
-                return Find::new(start..finish).map(|find| Catch::new(find, captures));
-            }
-
-            if start.next().is_none() {
-                break;
-            }
-        }
-
-        None
-    }
-
-    /// Returns the first [`Find`] that matches the [`Game`] associated with the `name`.
-    ///
-    /// [`None`] indicates the [`Game`] does not match `land`.
-    #[inline]
-    #[must_use]
-    pub fn grab<'l>(&self, land: &'l str, name: &str) -> Option<Find<'l>> {
-        self.catch(land)
-            .and_then(|catch| catch.get(name))
-            .and_then(|finds| finds.into_iter().next())
     }
 }

@@ -5,6 +5,8 @@ alias l := lint
 alias t := test
 alias v := validate
 
+set shell := ["nu.exe", "-c"]
+
 # Ideally `build` would allow warnings - see https://github.com/rust-lang/cargo/issues/3591.
 #
 # Builds the project
@@ -47,6 +49,7 @@ fix_format: _install_format
 # - clippy::multiple_crate_versions: not fixable when caused by dependencies
 # - clippy::implicit_return: rust convention calls for implicit return
 # - clippy::redundant_pub_crate: conflicts with clippy::unreachable_pub
+# - clippy::missing_inline_in_public_items: not needed in most cases
 #
 # Lints the project source code
 lint: _install_lint
@@ -89,6 +92,7 @@ lint: _install_lint
      -D clippy::pedantic \
      -D clippy::nursery \
      -A clippy::empty_enum \
+     -A clippy::missing_inline_in_public_items \
      -A clippy::multiple_crate_versions \
      -A clippy::implicit_return \
      -A clippy::redundant_pub_crate \
@@ -104,10 +108,10 @@ set_rust version:
 
 # Runs tests
 test:
-    cargo test --workspace --verbose --all-features
+    RUST_LOG=trace cargo test --workspace --verbose --all-features
 
 # Validates the project
-validate: (set_rust "1.46.0") validate_format validate_deps lint build test
+validate: (set_rust "1.56.1") validate_format validate_deps lint build test
 
 # Validates dependencies of the project
 validate_deps: _install_deps
