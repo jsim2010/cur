@@ -1,8 +1,8 @@
 [package]
 name = "cur"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["Justin Simerly <justinsimerly1992@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "The tool that will hunt for your regular expression."
 license = "MIT"
 repository = "https://github.com/jsim2010/cur"
