@@ -91,7 +91,7 @@ impl<'s> Iterator for Progress<'s> {
     }
 }
 
-/// The part of a search that matches a marked [`Odor`].
+/// The part of a search that is marked with a [`Name`].
 ///
 /// `'s` is the lifetime of the search.
 #[derive(Clone, Debug)]
@@ -221,7 +221,7 @@ impl<'s> Iterator for Fork<'s> {
 /// Associates [`Find`]s with their respective [`Name`]s.
 ///
 /// `'s` is the lifetime of the search.
-pub(crate) type Catch<'s> = BTreeMap<Name, Find<'s>>;
+pub type Catch<'s> = BTreeMap<Name, Find<'s>>;
 
 /// Information about the match of an [`Odor`] with part of a search.
 ///

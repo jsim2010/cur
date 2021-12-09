@@ -31,6 +31,8 @@ if let Some(catch) = cur.next() {
 
 License: MIT
 
+[`Catch`]: https://docs.rs/cur/latest/cur/type.Catch.html
 [`Cur`]: https://docs.rs/cur/latest/cur/struct.Cur.html
 [`Find`]: https://docs.rs/cur/latest/cur/struct.Find.html
+[`Name`]: https://docs.rs/cur/latest/cur/type.Name.html
 [`Odor`]: https://docs.rs/cur/latest/cur/struct.Odor.html

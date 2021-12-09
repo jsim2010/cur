@@ -8,9 +8,9 @@ mod pattern;
 
 pub use {
     cur_macro::odor,
-    hunt::Find,
+    hunt::{Catch, Find},
     once_cell::sync::Lazy,
-    pattern::{MultipleOdors, Odor, Scent},
+    pattern::{MarkOdorError, MultipleOdors, Name, Odor, Scent},
 };
 
 use {
@@ -19,7 +19,7 @@ use {
         convert::{TryFrom, TryInto},
         mem,
     },
-    hunt::{Catch, Fork, ForkKind, Haul, Progress},
+    hunt::{Fork, ForkKind, Haul, Progress},
     log::trace,
     pattern::{Odors, Scents},
 };

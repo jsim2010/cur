@@ -11,7 +11,7 @@ use {
 };
 
 /// The identifier of a mark.
-pub(crate) type Name = &'static str;
+pub type Name = &'static str;
 
 /// The atomic element of a unicode string pattern.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -221,7 +221,7 @@ pub enum CreateMultipleOdorsError {
     TooFewOdors,
 }
 
-/// A sequence of at least 2 [`Odors`].
+/// A sequence of at least 2 [`Odor`]s.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MultipleOdors {
     /// The first two [`Odor`]s.
